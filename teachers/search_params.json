@@ -1,0 +1,14 @@
+{
+  "device": "cuda",
+  "gpu_fast_mode": true,
+  "guardrail_q_window": 0.801,
+  "override_strength": 1.585,
+  "w_gpu_ev": 1.594,
+  "w_trap_wait": 1.254,
+  "w_pre_defense": 1.607,
+  "w_oya_control": 0.972,
+  "w_wall_kabe": 0.652,
+  "w_flush_restrain": 0.753,
+  "w_keiten_push": 1.647,
+  "w_placement_cond": 1.218
+}

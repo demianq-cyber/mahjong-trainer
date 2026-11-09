@@ -1,0 +1,21 @@
+# Pythonキャッシュ・環境
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# ビルド成果物・PyInstaller関連
+build/
+dist/
+
+
+# ログ・診断データ
+*.log
+diagnostic_logs/
+arena_results/*.json
+
+# その他・一時ファイルなど
+models/*.pth
+mortal/
+*.pth

@@ -1,0 +1,3262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mortal 麻雀AI トレーニングシミュレーター</title>
+<style>
+  :root {
+    --ui-scale: 1;
+    --mat-center: #19633a;
+    --mat-edge: #0c3b20;
+    --frame-wood: #2d1b12;
+    --gold: #fbbf24;
+    --danger: #ef4444;
+    --good: #10b981;
+  }
+  * { box-sizing: border-box; user-select: none; }
+  body {
+    margin: 0;
+    padding: clamp(6px, 1vw, 14px);
+    background: #060e09;
+    color: #f3f4f6;
+    font-family: "Meiryo", "Hiragino Kaku Gothic ProN", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+.layout {
+    width: 100%;
+    max-width: 1880px;
+    height: calc(100vh - 14px);
+    max-height: calc(100vh - 14px);
+    display: grid;
+    grid-template-columns: 1fr clamp(380px, 29vw, 530px);
+    gap: clamp(8px, 0.9vw, 14px);
+    zoom: var(--ui-scale);
+  }
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; height: auto; max-height: none; }
+  }
+
+  /* 横幅(vw)だけでなく縦幅(vh)にも自動追従させ、1920x1080でも確実に1画面に収める */
+  .tile-svg-hand { width: clamp(36px, min(3.2vw, 4.9vh), 60px); height: auto; aspect-ratio: 100/140; display: block; }
+  .tile-svg-river { width: clamp(21px, min(1.8vw, 2.75vh), 35px); height: auto; aspect-ratio: 100/140; display: block; }
+  .tile-svg-meld { width: clamp(19px, min(1.45vw, 2.3vh), 29px); height: auto; aspect-ratio: 100/140; display: inline-block; }
+  .tile-svg-dora { width: clamp(20px, min(1.6vw, 2.45vh), 32px); height: auto; aspect-ratio: 100/140; display: inline-block; }
+  .tile-svg-wait { width: clamp(21px, min(1.7vw, 2.55vh), 34px); height: auto; aspect-ratio: 100/140; display: inline-block; }
+  .tile-svg-modal { width: clamp(38px, min(2.8vw, 4.5vh), 56px); height: auto; aspect-ratio: 100/140; display: inline-block; }
+
+  .river-tile-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, filter 0.15s;
+  }
+  .river-tile-wrap.riichi-sideways {
+    transform: rotate(-90deg);
+    margin: 0 4px;
+  }
+  .river-tile-wrap.new-discard-anim {
+    animation: dropTile 0.28s ease-out;
+    filter: drop-shadow(0 0 8px var(--gold));
+  }
+  @keyframes dropTile {
+    0% { transform: scale(1.45) translateY(-12px); opacity: 0.4; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  .same-tile-glow {
+    filter: drop-shadow(0 0 9px #38bdf8) brightness(1.18) !important;
+  }
+
+  .mahjong-table-outer {
+    background: radial-gradient(circle at center, var(--mat-center) 0%, #124d2c 68%, var(--mat-edge) 100%);
+    border: 7px solid var(--frame-wood);
+    border-radius: 18px;
+    padding: clamp(6px, 0.8vh, 12px) clamp(8px, 1vw, 16px);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: inset 0 0 45px rgba(0,0,0,0.75), 0 8px 24px rgba(0,0,0,0.65);
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  .cutin-banner {
+    position: absolute;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(90deg, rgba(0,0,0,0), rgba(185, 28, 28, 0.92), rgba(0,0,0,0));
+    border-top: 2px solid var(--gold);
+    border-bottom: 2px solid var(--gold);
+    color: #fff;
+    font-size: clamp(1.6rem, 2.6vw, 2.5rem);
+    font-weight: 900;
+    padding: 8px 50px;
+    z-index: 60;
+    pointer-events: none;
+    display: none;
+    text-shadow: 0 0 14px var(--gold), 2px 2px 0 #000;
+    animation: cutinPop 0.35s ease-out;
+  }
+  @keyframes cutinPop {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    60% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+  }
+
+  .table-cross-grid {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) minmax(250px, 1.35fr) minmax(160px, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: clamp(4px, 0.6vh, 8px);
+    align-items: center;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .seat-box {
+    background: rgba(0, 0, 0, 0.28);
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    padding: clamp(4px, 0.55vh, 8px) 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+  }
+  .seat-box.active-turn {
+    border-color: var(--gold);
+    box-shadow: 0 0 14px rgba(251, 191, 36, 0.55);
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .seat-top { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: center; }
+  .seat-left { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; align-items: center; }
+  .seat-center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; }
+  .seat-right { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; align-items: center; }
+  .seat-bottom { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; align-items: center; }
+
+  .seat-info-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: clamp(0.72rem, 0.85vw, 0.9rem);
+    margin-bottom: 3px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+
+  .opp-concealed-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    justify-content: center;
+    align-items: flex-end;
+    margin-bottom: 3px;
+  }
+  .back-tile {
+    width: clamp(11px, min(0.95vw, 1.5vh), 16px);
+    height: clamp(16px, min(1.35vw, 2.1vh), 23px);
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 80%, #92400e 100%);
+    border: 1px solid #fef3c7;
+    border-bottom: 2px solid #fffbeb;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  .river-6col {
+    display: grid;
+    grid-template-columns: repeat(6, auto);
+    gap: 2px;
+    justify-content: center;
+    align-content: flex-start;
+    min-height: clamp(58px, 6.8vh, 96px);
+    padding: 3px;
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 6px;
+  }
+
+  .meld-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 3px;
+  }
+  .meld-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(255,255,255,0.1);
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+  }
+
+  .center-compass-wrap {
+    width: 100%;
+    background: radial-gradient(circle, #0f172a 0%, #020617 100%);
+    border: 2px solid #475569;
+    border-radius: 12px;
+    padding: clamp(5px, 0.7vh, 9px) 10px;
+    box-shadow: 0 0 16px rgba(0,0,0,0.8), inset 0 0 10px rgba(56, 189, 248, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .compass-scores-ring {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto auto auto;
+    align-items: center;
+    text-align: center;
+    gap: 3px;
+  }
+  .comp-seat {
+    font-family: monospace;
+    font-size: clamp(0.72rem, 0.85vw, 0.88rem);
+    background: rgba(255,255,255,0.06);
+    padding: 1px 5px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .comp-seat.is-oya { border-color: #ef4444; }
+  .comp-wind { font-weight: 900; color: var(--gold); margin-right: 3px; }
+  .riichi-stick-icon {
+    display: inline-block;
+    width: 24px;
+    height: 4px;
+    background: #fff;
+    border-radius: 3px;
+    position: relative;
+    vertical-align: middle;
+    margin-left: 3px;
+    box-shadow: 0 0 4px #fff;
+  }
+  .riichi-stick-icon::after {
+    content: "";
+    position: absolute;
+    width: 4px; height: 4px;
+    background: #dc2626;
+    border-radius: 50%;
+    top: 0; left: 10px;
+  }
+
+  .compass-center-lcd {
+    background: #090d16;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    padding: 3px 10px;
+    text-align: center;
+  }
+  .lcd-round { font-size: clamp(0.92rem, 1.15vw, 1.2rem); font-weight: 900; color: var(--gold); }
+  .lcd-sub { font-size: 0.7rem; color: #94a3b8; }
+
+  .wall-visual-box {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid #334155;
+    border-radius: 7px;
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .wall-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+  }
+  .wall-tiles-track {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    align-items: center;
+  }
+  .wall-stack-unit {
+    width: 7px;
+    height: 10px;
+    background: linear-gradient(180deg, #fbbf24 0%, #b45309 100%);
+    border: 1px solid #fde68a;
+    border-radius: 2px;
+    box-shadow: 0 1px 0 #78350f;
+  }
+  .wall-stack-unit.dead-wall {
+    background: linear-gradient(180deg, #60a5fa 0%, #1d4ed8 100%);
+    border-color: #bfdbfe;
+    box-shadow: 0 1px 0 #1e3a8a;
+  }
+
+  .wind-badge { background: #1e3a8a; color: #93c5fd; font-size: 0.75em; padding: 1px 4px; border-radius: 4px; margin-left: 3px; }
+  .oya-badge { background: #dc2626; color: #fff; font-size: 0.75em; padding: 1px 4px; border-radius: 4px; margin-left: 3px; }
+  .riichi-badge { background: var(--gold); color: #000; font-weight: bold; font-size: 0.75em; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+  .tenpai-self-badge { background: #10b981; color: #000; font-weight: 900; font-size: 0.75em; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+  .shanten-self-badge { background: #0284c7; color: #fff; font-weight: bold; font-size: 0.75em; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+  .furiten-self-badge { background: #ef4444; color: #fff; font-weight: 900; font-size: 0.75em; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+
+  @keyframes pulseRed {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+    50% { box-shadow: 0 0 12px 4px rgba(239, 68, 68, 0.9); }
+  }
+
+  /* 有効牌バー：高さを完全固定し、ホバー時に手牌が上下する現象を100%防止 */
+  .tenpai-bar {
+    background: rgba(15, 23, 42, 0.94);
+    border: 1.5px solid #38bdf8;
+    border-radius: 9px;
+    padding: 4px 10px;
+    margin-top: 4px;
+    height: clamp(64px, 7.6vh, 80px);
+    min-height: clamp(64px, 7.6vh, 80px);
+    max-height: clamp(64px, 7.6vh, 80px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .tenpai-bar.shanten-only-mode {
+    height: clamp(32px, 3.6vh, 40px);
+    min-height: clamp(32px, 3.6vh, 40px);
+    max-height: clamp(32px, 3.6vh, 40px);
+  }
+  .tenpai-bar.is-tenpai-mode {
+    background: rgba(6, 78, 59, 0.94);
+    border-color: #10b981;
+  }
+  .tenpai-bar.is-furiten {
+    background: rgba(127, 29, 29, 0.94);
+    border-color: #ef4444;
+  }
+  .inline-alert-pill {
+    background: #dc2626;
+    color: #fff;
+    font-weight: 900;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+  .waits-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .waits-row::-webkit-scrollbar { display: none; }
+  .wait-discard-chip {
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 7px;
+    padding: 2px 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .wait-discard-chip.active-hover {
+    border-color: var(--gold);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.65);
+  }
+  .wait-tile-unit { display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .wait-rem-label { font-size: 0.64rem; font-weight: bold; color: #fde68a; line-height: 1; margin-top: 1px; }
+
+  /* 危険牌バナー：こちらも1行固定高さにしてホバー時の伸縮を防止 */
+  .danger-explain-banner {
+    background: rgba(30, 41, 59, 0.94);
+    border: 1.5px solid #64748b;
+    border-radius: 8px;
+    padding: 0 10px;
+    margin-top: 4px;
+    height: clamp(28px, 3.2vh, 34px);
+    min-height: clamp(28px, 3.2vh, 34px);
+    max-height: clamp(28px, 3.2vh, 34px);
+    font-size: clamp(0.72rem, 0.82vw, 0.82rem);
+    display: none;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  .danger-explain-banner.has-threat {
+    border-color: #f87171;
+    background: rgba(69, 10, 10, 0.88);
+  }
+  #dangerExplainText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  .call-alert {
+    background: linear-gradient(90deg, #7c2d12, #b45309);
+    border: 2px solid var(--gold);
+    border-radius: 9px;
+    padding: 4px 12px;
+    margin-top: 4px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .hand-section {
+    background: rgba(8, 28, 17, 0.92);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 11px;
+    padding: clamp(6px, 0.8vh, 11px) clamp(8px, 1vw, 14px);
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .action-buttons { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; min-height: 30px; }
+  .act-btn {
+    position: relative;
+    background: linear-gradient(180deg, #2563eb, #1d4ed8);
+    color: #fff; font-weight: bold; font-size: clamp(0.8rem, 0.95vw, 0.98rem);
+    border: 2px solid #93c5fd; border-radius: 7px; padding: 4px 13px; cursor: pointer;
+  }
+  .act-btn.pass-btn { background: linear-gradient(180deg, #4b5563, #374151); border-color: #9ca3af; }
+  .act-btn.hora-btn { background: linear-gradient(180deg, #dc2626, #991b1b); border-color: #fca5a5; }
+  .act-btn.disabled-choice { opacity: 0.22; pointer-events: none; filter: grayscale(85%); }
+  .act-btn.highlight-top3 { border-color: var(--gold); box-shadow: 0 0 14px var(--gold); }
+
+  .hand-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: clamp(2px, 0.32vw, 5px);
+    padding-top: 20px;
+    padding-bottom: 15px;
+    min-height: clamp(74px, 9.2vh, 112px);
+  }
+  .tsumo-gap {
+    margin-left: clamp(8px, 1vw, 18px);
+    padding-left: clamp(8px, 0.9vw, 14px);
+    border-left: 2px dashed rgba(255,255,255,0.35);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .tsumo-label { font-size: 0.68rem; color: var(--gold); margin-bottom: 2px; font-weight: bold; line-height: 1; }
+
+  /* 当たり判定(.tile-btn)自体は動かさず、内部のSVGと上部バッジだけを浮き上がらせることでホバー外れループを防止 */
+  .tile-btn {
+    position: relative;
+    cursor: pointer;
+    display: inline-block;
+  }
+  .tile-btn .tile-svg-hand,
+  .tile-btn .danger-badge,
+  .tile-btn .hint-overlay-badge {
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .tile-btn:hover .tile-svg-hand,
+  .tile-btn:hover .danger-badge,
+  .tile-btn:hover .hint-overlay-badge {
+    transform: translateY(-8px);
+  }
+  .tile-btn .danger-badge,
+  .tile-btn .hint-overlay-badge {
+    transform: translateX(-50%);
+  }
+  .tile-btn:hover .danger-badge,
+  .tile-btn:hover .hint-overlay-badge {
+    transform: translate(-50%, -8px);
+  }
+  .tile-btn.disabled-choice { opacity: 0.24; pointer-events: none; filter: grayscale(80%); }
+  .tile-btn.highlight-top3 .tile-svg-hand { transform: translateY(-6px); filter: drop-shadow(0 0 9px var(--gold)); }
+
+  .tile-ukeire-sub {
+    position: absolute;
+    bottom: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    font-weight: bold;
+    padding: 0 3px;
+    border-radius: 3px;
+    white-space: nowrap;
+    background: rgba(15, 23, 42, 0.85);
+    color: #93c5fd;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    pointer-events: none;
+  }
+  .tile-ukeire-sub.is-max-ukeire { background: #10b981; color: #000; border-color: #a7f3d0; }
+  .tile-ukeire-sub.is-tenpai-sub { background: var(--gold); color: #000; border-color: #fff; }
+  .tile-ukeire-sub.is-furiten-sub { background: #ef4444; color: #fff; border-color: #fca5a5; }
+  .tile-ukeire-sub.is-back-sub { background: rgba(55, 65, 81, 0.7); color: #9ca3af; border-color: transparent; }
+
+  .hint-overlay-badge {
+    position: absolute; top: -20px; left: 50%;
+    font-size: 0.64rem; font-weight: bold; padding: 1px 4px; border-radius: 4px;
+    white-space: nowrap; background: #1f2937; color: #d1d5db; border: 1px solid #4b5563;
+    pointer-events: none; z-index: 6;
+  }
+  .hint-overlay-badge.hint-good { background: var(--gold); color: #000; border-color: #fff; }
+
+  .danger-badge {
+    position: absolute; top: -20px; left: 50%;
+    font-size: 0.64rem; font-weight: 900; padding: 1px 4px; border-radius: 4px;
+    white-space: nowrap; pointer-events: none; z-index: 5;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  .danger-safe { background: #10b981; color: #000; border: 1px solid #a7f3d0; }
+  .danger-quasi_safe { background: #38bdf8; color: #000; border: 1px solid #bae6fd; }
+  .danger-suji { background: #fde047; color: #000; border: 1px solid #fef08a; }
+  .danger-caution { background: #fb923c; color: #000; border: 1px solid #fed7aa; }
+  .danger-warning { background: #f97316; color: #fff; border: 1px solid #fdba74; }
+  .danger-danger { background: #dc2626; color: #fff; border: 1px solid #fca5a5; animation: pulseRed 1.1s infinite; }
+
+  .coach-panel {
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 16px;
+    padding: clamp(10px, 1.1vw, 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    max-height: calc(100vh - 20px);
+  }
+  .coach-title {
+    font-size: 1.05rem; font-weight: bold; color: var(--gold);
+    border-bottom: 1px solid #374151; padding-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  .toolbar-box {
+    display: flex; flex-direction: column; gap: 6px;
+    background: #1f2937; padding: 8px 10px; border-radius: 8px; font-size: 0.78rem;
+  }
+  .toolbar-line {
+    display: flex; justify-content: space-between; align-items: center; gap: 5px; flex-wrap: wrap;
+  }
+  .theme-desc-bar {
+    font-size: 0.73rem;
+    color: #93c5fd;
+    background: rgba(30, 58, 138, 0.45);
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    padding: 4px 8px;
+    border-radius: 5px;
+  }
+  .mode-select {
+    background: #111827; color: #f3f4f6; border: 1px solid #4b5563;
+    border-radius: 5px; padding: 3px 6px; font-size: 0.75rem; cursor: pointer;
+  }
+  .toggle-btn {
+    background: #374151; color: #e5e7eb; border: 1px solid #6b7280;
+    padding: 4px 7px; border-radius: 5px; cursor: pointer; font-size: 0.72rem; font-weight: bold;
+  }
+  .toggle-btn:hover { background: #4b5563; }
+  .toggle-btn.active { background: #d97706; color: #000; border-color: var(--gold); }
+  .toggle-btn.active-danger { background: #dc2626; color: #fff; border-color: #fca5a5; }
+  .toggle-btn.active-xray { background: #0284c7; color: #fff; border-color: #7dd3fc; }
+  .toggle-btn.active-shanten { background: #10b981; color: #000; border-color: #a7f3d0; }
+  .toggle-btn.preset-battle { background: #1e293b; color: #f8fafc; border-color: #94a3b8; padding: 5px 8px; }
+  .toggle-btn.preset-battle:hover { background: #334155; }
+  .toggle-btn.preset-study { background: #065f46; color: #ecfdf5; border-color: #34d399; padding: 5px 8px; }
+  .toggle-btn.preset-study:hover { background: #047857; }
+  .toggle-btn.log-dump-btn { background: #7c2d12; color: #fde68a; border-color: #f59e0b; }
+  .toggle-btn.log-dump-btn:hover { background: #9a3412; }
+
+  .log-status-banner {
+    display: none;
+    background: rgba(6, 78, 59, 0.92);
+    border: 1px solid #34d399;
+    color: #d1fae5;
+    font-size: 0.74rem;
+    padding: 6px 9px;
+    border-radius: 6px;
+    word-break: break-all;
+  }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat-box { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 5px; text-align: center; }
+  .stat-val { font-size: 0.96rem; font-weight: bold; color: #fff; }
+  .stat-label { font-size: 0.68rem; color: #9ca3af; }
+
+  .yaku-guide-box { background: #1f2937; border: 1px solid #374151; border-radius: 10px; padding: 9px 11px; }
+  .yaku-guide-header {
+    font-size: 0.86rem; font-weight: bold; color: #60a5fa; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .yaku-list { display: flex; flex-direction: column; gap: 5px; }
+  .yaku-item {
+    background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px; padding: 5px 8px;
+  }
+  .yaku-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  .yaku-name { font-weight: bold; font-size: 0.84rem; color: #f9fafb; }
+  .badge-status { font-size: 0.68rem; font-weight: bold; padding: 1px 5px; border-radius: 4px; }
+  .status-confirmed { background: #10b981; color: #000; }
+  .status-strong { background: #f59e0b; color: #000; }
+  .status-candidate { background: #3b82f6; color: #fff; }
+  .badge-han { font-size: 0.7rem; background: #374151; color: var(--gold); padding: 1px 5px; border-radius: 4px; font-weight: bold; }
+  .yaku-desc { font-size: 0.72rem; color: #9ca3af; margin-bottom: 3px; }
+  .progress-bar-bg { width: 100%; height: 4px; background: #374151; border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); }
+
+  .feedback-card { padding: 10px; border-radius: 10px; background: #1f2937; border-left: 5px solid #6b7280; }
+  .feedback-card.good { border-left-color: var(--good); background: rgba(16, 185, 129, 0.12); }
+  .feedback-card.bad { border-left-color: var(--danger); background: rgba(239, 68, 68, 0.15); }
+  .score-big { font-size: 1.3rem; font-weight: bold; margin: 4px 0; }
+
+  .comparison-box {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    border-radius: 8px;
+    padding: 9px 11px;
+    margin: 8px 0;
+    font-size: 0.79rem;
+    line-height: 1.52;
+    color: #e2e8f0;
+  }
+  .comparison-reason-item {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed rgba(255,255,255,0.12);
+    white-space: pre-line;
+  }
+  .comparison-reason-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .top3-list { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+  .top3-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+  }
+  .top3-item.rejected-move { opacity: 0.5; border-color: rgba(239, 68, 68, 0.4); }
+  .rank-badge { font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; background: #374151; color: #fff; }
+  .rank-1 { background: var(--gold); color: #000; }
+  .rank-2 { background: #9ca3af; color: #000; }
+  .rank-3 { background: #b45309; color: #fff; }
+
+  .mistake-log-item {
+    font-size: 0.74rem; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444;
+    padding: 4px 7px; border-radius: 4px; margin-bottom: 4px;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; z-index: 9999; padding: 20px;
+  }
+  .modal-box {
+    background: linear-gradient(145deg, #111827, #1f2937); border: 3px solid var(--gold);
+    border-radius: 18px; width: 100%; max-width: 820px; padding: 22px 26px; color: #fff;
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 2px solid rgba(251, 191, 36, 0.4); padding-bottom: 10px; margin-bottom: 14px;
+  }
+  .modal-title { font-size: clamp(1.3rem, 2vw, 1.9rem); font-weight: 900; color: var(--gold); }
+  .modal-hand-box {
+    background: rgba(20, 73, 43, 0.7); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px; padding: 12px; display: flex; flex-wrap: wrap; align-items: flex-end;
+    justify-content: center; gap: 5px; margin-bottom: 14px;
+  }
+  .modal-yakus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .modal-yaku-row {
+    background: rgba(255,255,255,0.07); border-left: 4px solid var(--gold);
+    padding: 6px 12px; border-radius: 6px; display: flex; justify-content: space-between; font-weight: bold;
+  }
+  .modal-total-score {
+    text-align: center; font-size: 1.7rem; font-weight: 900; color: #fef08a;
+    background: rgba(180, 83, 9, 0.35); border: 1px solid var(--gold); border-radius: 10px; padding: 8px; margin-bottom: 14px;
+  }
+  .modal-deltas-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .modal-delta-card { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px; text-align: center; font-size: 0.86rem; }
+  .modal-close-btn {
+    width: 100%; background: linear-gradient(180deg, #f59e0b, #d97706); color: #000;
+    font-weight: 900; font-size: 1.1rem; border: none; border-radius: 10px; padding: 11px; cursor: pointer;
+  }
+.prompt-open-btn {
+    width: 100%;
+    margin-top: 8px;
+    background: linear-gradient(180deg, #0284c7, #0369a1);
+    color: #fff;
+    font-weight: bold;
+    font-size: 0.8rem;
+    border: 1px solid #7dd3fc;
+    border-radius: 7px;
+    padding: 7px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .prompt-open-btn:hover { background: linear-gradient(180deg, #0369a1, #075985); }
+  .toggle-btn.prompt-top-btn { background: #0369a1; color: #e0f2fe; border-color: #38bdf8; }
+  .toggle-btn.prompt-top-btn:hover { background: #0284c7; }
+
+  .prompt-textarea {
+    width: 100%;
+    height: 360px;
+    background: #090d16;
+    color: #e2e8f0;
+    border: 1px solid #475569;
+    border-radius: 10px;
+    padding: 12px;
+    font-family: "Meiryo", monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    resize: vertical;
+    user-select: text;
+    margin-bottom: 12px;
+  }
+  .prompt-tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .prompt-tab-btn {
+    flex: 1;
+    background: #1f2937;
+    color: #cbd5e1;
+    border: 1px solid #4b5563;
+    border-radius: 7px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .prompt-tab-btn.active-tab {
+    background: #0284c7;
+    color: #fff;
+    border-color: #7dd3fc;
+  }
+  .prompt-action-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 10px;
+  }
+  .prompt-copy-btn {
+    background: linear-gradient(180deg, #10b981, #059669);
+    color: #000;
+    font-weight: 900;
+    font-size: 1rem;
+    border: none;
+    border-radius: 10px;
+    padding: 11px;
+    cursor: pointer;
+  }
+  .prompt-copy-btn:hover { filter: brightness(1.08); }
+/* 誰から鳴いたかバッジ・横向き牌・河の被鳴きラベル */
+  .meld-from-badge {
+    font-size: 0.66rem;
+    font-weight: bold;
+    background: #1e3a8a;
+    color: #bae6fd;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-right: 3px;
+    border: 1px solid #38bdf8;
+    white-space: nowrap;
+  }
+  .meld-from-badge.from-self-alert {
+    background: #991b1b;
+    color: #fef08a;
+    border-color: #f87171;
+  }
+  .meld-called-tile {
+    display: inline-flex;
+    transform: rotate(-90deg);
+    margin: 0 4px;
+  }
+  .river-called-wrap {
+    position: relative;
+    outline: 1.5px dashed #fbbf24;
+    border-radius: 4px;
+    opacity: 0.65;
+  }
+  .river-called-tag {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(180, 83, 9, 0.95);
+    color: #fff;
+    font-size: 0.54rem;
+    font-weight: bold;
+    padding: 0 3px;
+    border-radius: 2px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* リアルタイム点数計算（符・飜）ボックス */
+  .score-calc-box {
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 10px;
+    padding: 9px 11px;
+  }
+  .score-calc-item {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 6px;
+    padding: 6px 9px;
+    margin-bottom: 5px;
+    font-size: 0.76rem;
+  }
+  .score-calc-item:last-child { margin-bottom: 0; }
+  .fu-chip {
+    display: inline-block;
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    color: #fde68a;
+    font-size: 0.74rem;
+    font-weight: bold;
+    padding: 2px 7px;
+    border-radius: 5px;
+    margin: 2px 3px 2px 0;
+  }
+  .modal-fu-box {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid #475569;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 0.84rem;
+  }
+  /* 鳴き・ロン時の卓上矢印オーバーレイ演出 */
+  .call-arrow-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 58;
+    overflow: visible;
+  }
+  .call-arrow-line {
+    stroke-linecap: round;
+    stroke-dasharray: 1200;
+    stroke-dashoffset: 1200;
+    animation: drawCallArrow 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes drawCallArrow {
+    to { stroke-dashoffset: 0; }
+  }
+  .call-target-ring {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: pulseTargetRing 0.55s ease-out infinite;
+  }
+  @keyframes pulseTargetRing {
+    0% { transform: scale(0.5); opacity: 1; }
+    100% { transform: scale(2.1); opacity: 0; }
+  }
+  .seat-box.call-actor-highlight {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.9), inset 0 0 15px rgba(56, 189, 248, 0.35) !important;
+  }
+  .seat-box.call-target-highlight {
+    border-color: #f97316 !important;
+    box-shadow: 0 0 24px rgba(249, 115, 22, 0.9), inset 0 0 15px rgba(239, 68, 68, 0.4) !important;
+  }
+/* ドラ牌・赤ドラのキラキラ発光＆シャイン演出 */
+  .dora-tile-svg {
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
+  }
+  .dora-border-rect {
+    animation: doraBorderPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes doraBorderPulse {
+    0%, 100% { stroke: #f59e0b; }
+    50% { stroke: #fde047; }
+  }
+  .dora-shine-bar {
+    animation: doraShineSweep 2.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes doraShineSweep {
+    0%, 55% { transform: translateX(-140px) skewX(-25deg); opacity: 0; }
+    65% { opacity: 0.9; }
+    85%, 100% { transform: translateX(260px) skewX(-25deg); opacity: 0; }
+  }
+  .dora-sparkle {
+    transform-box: fill-box;
+    transform-origin: center;
+    pointer-events: none;
+  }
+  .dora-sparkle.sp-1 {
+    animation: doraTwinkle 1.4s ease-in-out infinite;
+  }
+  .dora-sparkle.sp-2 {
+    animation: doraTwinkle 1.4s ease-in-out 0.7s infinite;
+  }
+  @keyframes doraTwinkle {
+    0%, 100% { transform: scale(0.35) rotate(0deg); opacity: 0.25; }
+    50% { transform: scale(1.25) rotate(45deg); opacity: 1; }
+  }
+/* リザルト画面内のスクロール＆1局振り返りリスト用スタイル */
+  .modal-box {
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+  #aiPromptModal {
+    z-index: 10050;
+  }
+  .review-section-box {
+    background: rgba(15, 23, 42, 0.9);
+    border: 1.5px solid #475569;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+  .review-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+  .review-list-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 290px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .review-item-card {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 8px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .review-item-card.is-bad-review {
+    border-left-color: #ef4444;
+    background: rgba(69, 10, 10, 0.45);
+  }
+  .review-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .review-mini-hand {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 2px;
+    background: rgba(8, 28, 17, 0.8);
+    padding: 4px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .review-compare-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,0,0,0.4);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+  }
+  .review-btn-group {
+    display: flex;
+    gap: 6px;
+  }
+  .review-prompt-btn {
+    background: #0284c7;
+    color: #fff;
+    border: 1px solid #7dd3fc;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 0.74rem;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .review-prompt-btn:hover { background: #0369a1; }
+  .review-copy-btn {
+    background: #059669;
+    color: #fff;
+    border: 1px solid #6ee7b7;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 0.74rem;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .review-copy-btn:hover { background: #047857; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="mahjong-table-outer" id="mahjongTableOuter">
+    <svg class="call-arrow-overlay" id="callArrowOverlay"></svg>
+    <div class="cutin-banner" id="cutinBanner">リーチ！</div>
+    
+
+    <div class="table-cross-grid">
+      <div class="seat-box seat-top" id="seatBox2">
+        <div class="seat-info-bar" id="seatInfo2"></div>
+        <div class="opp-concealed-row" id="oppHand2"></div>
+        <div class="river-6col" id="river2"></div>
+        <div class="meld-row" id="melds2"></div>
+      </div>
+
+      <div class="seat-box seat-left" id="seatBox3">
+        <div class="seat-info-bar" id="seatInfo3"></div>
+        <div class="opp-concealed-row" id="oppHand3"></div>
+        <div class="river-6col" id="river3"></div>
+        <div class="meld-row" id="melds3"></div>
+      </div>
+
+      <div class="seat-center">
+        <div class="center-compass-wrap">
+          <div class="compass-scores-ring">
+            <div></div>
+            <div class="comp-seat" id="compSeat2"></div>
+            <div></div>
+            <div class="comp-seat" id="compSeat3"></div>
+            <div class="compass-center-lcd">
+              <div class="lcd-round" id="lcdRound">東1局</div>
+              <div class="lcd-sub" id="lcdSub">0本場 / 供託0</div>
+            </div>
+            <div class="comp-seat" id="compSeat1"></div>
+            <div></div>
+            <div class="comp-seat" id="compSeat0"></div>
+            <div></div>
+          </div>
+
+          <div class="wall-visual-box">
+            <div class="wall-top-row">
+              <span>🀄 牌山 残り: <strong style="color:var(--gold); font-size:0.95rem;" id="wallRemText">70</strong> 枚</span>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <span style="font-size:0.75rem; color:#cbd5e1;">王牌ドラ:</span>
+                <div id="doraContainer" style="display:flex; gap:2px;"></div>
+              </div>
+            </div>
+            <div class="wall-tiles-track" id="wallBlocksTrack" title="黄色＝ツモ山（2枚1組×残り山）、青色＝王牌（嶺上・ドラ表示14枚）"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="seat-box seat-right" id="seatBox1">
+        <div class="seat-info-bar" id="seatInfo1"></div>
+        <div class="opp-concealed-row" id="oppHand1"></div>
+        <div class="river-6col" id="river1"></div>
+        <div class="meld-row" id="melds1"></div>
+      </div>
+
+      <div class="seat-box seat-bottom" id="seatBox0">
+        <div class="seat-info-bar" id="seatInfo0"></div>
+        <div class="river-6col" id="river0"></div>
+        <div class="meld-row" id="melds0"></div>
+      </div>
+    </div>
+
+    <div class="tenpai-bar" id="tenpaiBar"></div>
+
+    <div class="danger-explain-banner" id="dangerExplainBanner">
+      <div id="dangerExplainText">🛡️ 危険牌可視化モードON：手牌にマウスを乗せると、現物・筋・壁（ノーチャンス）・無筋の詳しい理由が表示されます。</div>
+    </div>
+
+    <div class="call-alert" id="callAlert">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-weight:bold; font-size:1.05rem;" id="callAlertText"></span>
+        <div id="callAlertTile"></div>
+      </div>
+      <span style="font-size:0.86rem; color:#fde68a;">下のボタンからアクションを選択してください</span>
+    </div>
+
+    <div class="hand-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span style="font-size:clamp(0.82rem, 0.95vw, 1rem); color:#cbd5e1;" id="turnGuideText">
+          牌をクリックして打牌を選択してください
+        </span>
+        <div class="action-buttons" id="actionButtons"></div>
+      </div>
+      <div class="hand-row" id="handRow"></div>
+    </div>
+  </div>
+
+  <!-- 右側：設定・コーチングパネル -->
+  <div class="coach-panel">
+    <div class="coach-title">
+      <span>Mortal AI コーチ</span>
+      <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+        <span style="font-size:0.74rem; color:#d1d5db; font-weight:normal;">倍率:</span>
+        <input type="range" id="zoomSlider" min="0.80" max="1.35" step="0.05" value="1.00"
+               style="width:50px; cursor:pointer;" oninput="updateZoom(this.value)">
+        <span id="zoomValueText" style="font-size:0.74rem; color:#d1d5db; font-weight:normal;">100%</span>
+        <button class="toggle-btn prompt-top-btn" onclick="openAiPromptModal('current')" title="現在の局面でなぜAIが1位の手を推奨するのか質問するためのプロンプトを表示します">
+          💬 AI質問プロンプト
+        </button>
+        <button class="toggle-btn" onclick="resetGame()" title="進行不能時でも強制的にリセットして新規対局を開始します">
+          新規対局
+        </button>
+      </div>
+    </div>
+
+    <div class="log-status-banner" id="logStatusBanner"></div>
+
+    <div class="toolbar-box">
+      <div class="toolbar-line">
+        <div style="display:flex; align-items:center; gap:4px; flex:1;">
+          <span>🎯 特訓:</span>
+          <select class="mode-select" id="themeSelect" style="flex:1;" onchange="updateSettings(false)">
+            <option value="normal">通常対局 (ランダム配牌)</option>
+            <option value="honitsu">混一色・清一色 (染め手特訓)</option>
+            <option value="toitsu">七対子・対々和 (対子手特訓)</option>
+            <option value="tanyao_pinfu">断幺九・平和 (好形・牌効率特訓)</option>
+            <option value="yakuhai">役牌・速度仕掛け (鳴き判断特訓)</option>
+            <option value="dora_heavy">ドラ3以上 (高打点・押し引き特訓)</option>
+            <option value="yaochu">国士・チャンタ・混老頭 (端牌特訓)</option>
+          </select>
+        </div>
+        <button class="toggle-btn" onclick="updateSettings(true)" title="現在の特訓テーマのまま新しい配牌を引き直します">
+          🔄 配牌変更
+        </button>
+      </div>
+      <div class="theme-desc-bar" id="themeDescText">
+        偏りのない通常のランダム配牌で総合力を鍛えます。
+      </div>
+
+      <!-- ▼ 追加：教師AI切り替え＆探索強度セレクタ -->
+      <!-- ▼ 教師AI切り替え＆探索強度・ロマン度セレクタ -->
+      <div class="toolbar-line" style="margin-top:2px;">
+        <div style="display:flex; align-items:center; gap:4px; flex:1;">
+          <span>🎓 教師AI:</span>
+          <select class="mode-select" id="teacherSelect" style="flex:1; border-color:#fbbf24; color:#fde68a; font-weight:bold;" onchange="updateSettings(false)">
+            <option value="mortal">標準型 (Mortal 純粋評価)</option>
+            <option value="search">タイプA：探索型 (7大メタ戦略＋GPU山読み)</option>
+            <option value="roman">タイプB：ロマン型 (役満・高打点特化)</option>
+            <option value="speed">タイプC：スピード型 (即効・牌効率特化)</option>
+          </select>
+        </div>
+        <div id="searchPresetWrap" style="display:none; align-items:center; gap:4px;">
+          <span>🔍 強度:</span>
+          <select class="mode-select" id="searchPresetSelect" onchange="updateSettings(false)">
+            <option value="fast">⚡ 高速 (0.10秒)</option>
+            <option value="standard" selected>⚖️ 標準 (0.30秒)</option>
+          </select>
+        </div>
+        <div id="romanPresetWrap" style="display:none; align-items:center; gap:4px;">
+          <span>🌟 ロマン度:</span>
+          <select class="mode-select" id="romanPresetSelect" style="border-color:#f472b6; color:#fbcfe8;" onchange="updateSettings(false)">
+            <option value="practical">🔥 実戦ロマン</option>
+            <option value="dream" selected>💎 夢追いロマン</option>
+            <option value="madness">👑 狂気ロマン</option>
+          </select>
+        </div>
+        <div id="speedPresetWrap" style="display:none; align-items:center; gap:4px;">
+          <span>⚡ 速度:</span>
+          <select class="mode-select" id="speedPresetSelect" style="border-color:#38bdf8; color:#bae6fd;" onchange="updateSettings(false)">
+            <option value="efficiency">📐 純粋牌効率</option>
+            <option value="rapid" selected>⚡ 高速仕掛け</option>
+            <option value="sonic">🌪️ 超音速・局回し</option>
+          </select>
+        </div>
+      </div>
+      <div class="theme-desc-bar" id="teacherDescText" style="background:rgba(180, 83, 9, 0.25); border-color:rgba(251, 191, 36, 0.4); color:#fde68a;">
+        🎓 Mortalのニューラルネットが出力したQ値（局収支期待値）をそのまま用いる標準コーチです。
+      </div>
+
+      <div class="toolbar-line">
+        <div>
+          <span>🤖 相手: </span>
+          <select class="mode-select" id="aiLevelSelect" onchange="updateSettings(false)">
+            <option value="1">Lv.1 入門 (初心者)</option>
+            <option value="2">Lv.2 初級 (雀士)</option>
+            <option value="3" selected>Lv.3 中級 (雀傑〜雀豪)</option>
+            <option value="4">Lv.4 上級 (雀聖)</option>
+            <option value="5">Lv.5 最強 (Mortal)</option>
+          </select>
+        </div>
+        <div>
+          <span>📏 採点: </span>
+          <select class="mode-select" id="modeSelect" onchange="updateSettings(false)">
+            <option value="standard">標準 (3位内＆45点↑)</option>
+            <option value="strict">厳格 (3位内＆65点↑)</option>
+            <option value="top1">1位のみ許容</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="toolbar-line">
+        <button class="toggle-btn active-shanten" id="shantenToggleBtn" onclick="toggleShantenDisplay()" title="シャンテン数・聴牌バッジ・フリテン警告の表示をON/OFFします">
+          📐 シャンテン: ON
+        </button>
+        <button class="toggle-btn active-shanten" id="ukeireToggleBtn" onclick="toggleUkeireDisplay()" title="手牌下の受け入れ枚数と待ち牌・有効牌プレビューの表示をON/OFFします">
+          🀄 有効牌: ON
+        </button>
+        <button class="toggle-btn active" id="scoreCalcToggleBtn" onclick="toggleScoreCalc()" title="リアルタイムの点数計算（符計算・飜計算の予想・候補）表示をON/OFFします">
+          🧮 点数計算: ON
+        </button>
+        <button class="toggle-btn active-danger" id="dangerToggleBtn" onclick="toggleDangerMode()" title="他家リーチ・副露時の危険牌バッジと解説の表示をON/OFFします">
+          🛡️ 危険牌: ON
+        </button>
+        <button class="toggle-btn active" id="yakuGuideToggleBtn" onclick="toggleYakuGuide()" title="狙えそうな役・ドラ解析パネルの表示をON/OFFします">
+          🎯 役ナビ: ON
+        </button>
+      </div>
+      <div class="toolbar-line">
+        <button class="toggle-btn active" id="retryToggleBtn" onclick="toggleRetryMode()" title="悪手を選んだ際の再選択(待った)ストップ機能と3位内候補ハイライトをON/OFFします">
+          🔄 再選択: ON
+        </button>
+        <button class="toggle-btn active" id="top3EvalToggleBtn" onclick="toggleTop3Eval()" title="AI採点フィードバック・3位以内の候補リスト・学習スタッツの表示をON/OFFします">
+          📊 AI評価・3位手: ON
+        </button>
+        <button class="toggle-btn" id="hintToggleBtn" onclick="toggleHint()" title="打牌前に手牌上にAI順位とスコアを表示します">
+          💡 ヒント: OFF
+        </button>
+        <button class="toggle-btn" id="xrayToggleBtn" onclick="toggleOpponentHands()" title="相手3人の手牌を表向きにして透視します">
+          👁️ 相手手牌: OFF
+        </button>
+      </div>
+
+      <div class="toolbar-line">
+        <button class="toggle-btn active" id="animToggleBtn" onclick="toggleAnim()">
+          🎬 演出: ON
+        </button>
+        <button class="toggle-btn active" id="soundToggleBtn" onclick="toggleSound()">
+          🔊 音: ON
+        </button>
+        <button class="toggle-btn preset-battle" onclick="applyPlayEnvironmentPreset(false)" title="すべての学習補助機能をOFFにし、実戦と同じ通常のプレイ環境にします">
+          ⚔️ 通常プレイ(全OFF)
+        </button>
+        <button class="toggle-btn preset-study" onclick="applyPlayEnvironmentPreset(true)" title="標準の学習・コーチング機能をすべてONに戻します">
+          🎓 学習(標準ON)
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="statsGridBox">
+      <div class="stat-box">
+        <div class="stat-val" id="statGoodRate">--%</div>
+        <div class="stat-label">一発好手率</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="statTop1Rate">--%</div>
+        <div class="stat-label">AI 1位一致率</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="statMistakes" style="color:#f87171;">0回</div>
+        <div class="stat-label">悪手（基準外）</div>
+      </div>
+    </div>
+
+    <div id="feedbackContainer">
+      <div class="feedback-card">
+        <div style="font-size:0.82rem; color:#9ca3af;">
+          手牌をクリックするとMortal AIの評価スコアと、「なぜAIの1位手が優れているか（評価差・具体的有効牌・好形変化・打点・安全度の5軸詳細解説）」および上位3候補が表示されます。
+        </div>
+      </div>
+    </div>
+
+    <div class="score-calc-box" id="scoreEstimateBox">
+      <div class="yaku-guide-header" style="color:#fbbf24;">
+        <span id="scoreEstimateTitle">🧮 リアルタイム点数・符・飜計算</span>
+        <span style="font-size:0.7rem; color:#9ca3af; font-weight:normal;">予想・候補</span>
+      </div>
+      <div id="scoreEstimateContent"></div>
+    </div>
+
+    <div class="yaku-guide-box" id="yakuGuideBox">
+      <div class="yaku-guide-header">
+        <span>🎯 狙えそうな役・ドラ解析</span>
+        <span style="font-size:0.7rem; color:#9ca3af; font-weight:normal;">リアルタイム</span>
+      </div>
+      <div class="yaku-list" id="potentialYakuList"></div>
+    </div>
+
+    <div class="yaku-guide-box" id="mistakeLogBox" style="display:none;">
+      <div class="yaku-guide-header" style="color:#f87171;">
+        <span>📝 対局中の悪手（ミス）履歴ログ</span>
+      </div>
+      <div id="mistakeLogList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="roundResultModal">
+  <div class="modal-box" id="roundResultContent"></div>
+</div>
+
+<div class="modal-overlay" id="aiPromptModal">
+  <div class="modal-box" style="max-width: 780px;">
+    <div class="modal-header">
+      <div>
+        <div style="font-size:0.82rem; color:#93c5fd;">ChatGPT / Gemini 等に貼り付けて詳細な理由を質問できます</div>
+        <div class="modal-title" style="font-size:1.35rem;">🤖 AI最善手（第1位）の理由質問プロンプト</div>
+      </div>
+      <button class="toggle-btn" onclick="closeAiPromptModal()" style="font-size:0.85rem; padding:5px 12px;">✖ 閉じる</button>
+    </div>
+
+    <div class="prompt-tab-bar">
+      <button class="prompt-tab-btn" id="tabLastDecisionBtn" onclick="switchPromptModalTab('last')">
+        ⏮️ 直前に打牌・選択した局面（推奨）
+      </button>
+      <button class="prompt-tab-btn" id="tabCurrentTurnBtn" onclick="switchPromptModalTab('current')">
+        📍 現在目の前にある手番の局面
+      </button>
+    </div>
+
+    <textarea class="prompt-textarea" id="aiPromptTextarea" readonly></textarea>
+
+    <div class="prompt-action-row">
+      <button class="prompt-copy-btn" id="copyPromptBtn" onclick="copyAiPromptToClipboard()">
+        📋 プロンプトをクリップボードにコピー
+      </button>
+      <button class="modal-close-btn" style="background:#374151; color:#fff;" onclick="closeAiPromptModal()">
+        閉じる
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let showShantenDisplay = true;
+let showUkeireDisplay = true;
+let enableRetry = true;
+let showTop3Eval = true;
+let showYakuGuide = true;
+let showScoreCalc = true; // リアルタイム点数計算（符・飜）表示フラグ
+let showDangerOverlay = true;
+let showHintOverlay = false;
+let showOpponentHands = false;
+let enableStepAnim = true;
+let enableSound = true;
+
+let isAnimatingSteps = false;
+let animGeneration = 0; // 新規対局リセット時に進行中のアニメーションを即座にキャンセルするトークン
+let latestState = null;
+
+window.addEventListener("pagehide", () => {
+  try { navigator.sendBeacon("/api/shutdown"); } catch (e) {}
+});
+window.addEventListener("beforeunload", () => {
+  try { navigator.sendBeacon("/api/shutdown"); } catch (e) {}
+});
+setInterval(() => {
+  fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
+}, 3000);
+
+let audioCtx = null;
+function playSE(type) {
+  if (!enableSound) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    if (type === "discard") {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(190, now);
+      osc.frequency.exponentialRampToValueAtTime(55, now + 0.055);
+      gain.gain.setValueAtTime(0.28, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } else if (type === "riichi") {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(1480, now + 0.32);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.36);
+    } else if (type === "call") {
+      [587.33, 880].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+        gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.12);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.13);
+      });
+    } else if (type === "bad") {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(150, now);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.23);
+    } else if (type === "hora") {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+        gain.gain.setValueAtTime(0.24, now + idx * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.28);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.09);
+        osc.stop(now + idx * 0.09 + 0.30);
+      });
+    }
+  } catch (e) {}
+}
+
+function updateZoom(val) {
+  document.documentElement.style.setProperty("--ui-scale", val);
+  document.getElementById("zoomValueText").textContent = `${Math.round(val * 100)}%`;
+}
+
+async function dumpDiagnosticLog(autoNote = null) {
+  const isAuto = (typeof autoNote === "string" && autoNote.length > 0);
+  const note = isAuto
+    ? `[UI自動テスト検知] ${autoNote}`
+    : (window.prompt("ログに記録するメモ（任意：例「ポンできない」「牌が選べない」など）:", "") || "");
+
+  const clientSnapshot = {
+    isAnimatingSteps,
+    isSendingAction: typeof isSendingAction !== "undefined" ? isSendingAction : false,
+    showShantenDisplay,
+    showUkeireDisplay,
+    enableRetry,
+    showTop3Eval,
+    allowed_choices_in_ui: latestState ? latestState.allowed_choices : [],
+    is_call_chance_in_ui: latestState ? latestState.is_call_chance : null,
+  };
+  try {
+    const res = await fetch("/api/dump_log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note, client_state: clientSnapshot })
+    });
+    const data = await res.json();
+    const banner = document.getElementById("logStatusBanner");
+    if (data.ok) {
+      banner.style.display = "block";
+      banner.innerHTML = `✅ 診断ログを保存しました: <strong>diagnostic_logs/${data.filename}</strong><br>（理由: ${note || "手動出力"} / 許容候補: ${JSON.stringify(data.allowed_choices)}）`;
+      setTimeout(() => { banner.style.display = "none"; }, 8000);
+      if (typeof logUiDebug === "function" && isAuto) {
+        logUiDebug(`💾 ログ自動保存完了: ${data.filename}`, true);
+      }
+    }
+    return data;
+  } catch (err) {
+    if (!isAuto) alert("ログ出力に失敗しました: " + err);
+    return { ok: false };
+  }
+}
+
+function syncToggleButtonsUI() {
+  const shBtn = document.getElementById("shantenToggleBtn");
+  shBtn.textContent = showShantenDisplay ? "📐 シャンテン: ON" : "📐 シャンテン: OFF";
+  shBtn.classList.toggle("active-shanten", showShantenDisplay);
+
+  const ukBtn = document.getElementById("ukeireToggleBtn");
+  ukBtn.textContent = showUkeireDisplay ? "🀄 有効牌: ON" : "🀄 有効牌: OFF";
+  ukBtn.classList.toggle("active-shanten", showUkeireDisplay);
+
+  const dgBtn = document.getElementById("dangerToggleBtn");
+  dgBtn.textContent = showDangerOverlay ? "🛡️ 危険牌: ON" : "🛡️ 危険牌: OFF";
+  dgBtn.classList.toggle("active-danger", showDangerOverlay);
+
+  const ykBtn = document.getElementById("yakuGuideToggleBtn");
+  ykBtn.textContent = showYakuGuide ? "🎯 役ナビ: ON" : "🎯 役ナビ: OFF";
+  ykBtn.classList.toggle("active", showYakuGuide);
+
+  const rtBtn = document.getElementById("retryToggleBtn");
+  rtBtn.textContent = enableRetry ? "🔄 再選択: ON" : "🔄 再選択: OFF";
+  rtBtn.classList.toggle("active", enableRetry);
+
+  const evBtn = document.getElementById("top3EvalToggleBtn");
+  evBtn.textContent = showTop3Eval ? "📊 AI評価・3位手: ON" : "📊 AI評価・3位手: OFF";
+  evBtn.classList.toggle("active", showTop3Eval);
+
+  const htBtn = document.getElementById("hintToggleBtn");
+  htBtn.textContent = showHintOverlay ? "💡 ヒント: ON" : "💡 ヒント: OFF";
+  htBtn.classList.toggle("active", showHintOverlay);
+
+  const xrBtn = document.getElementById("xrayToggleBtn");
+  xrBtn.textContent = showOpponentHands ? "👁️ 相手手牌: ON" : "👁️ 相手手牌: OFF";
+  xrBtn.classList.toggle("active-xray", showOpponentHands);
+
+  const anBtn = document.getElementById("animToggleBtn");
+  anBtn.textContent = enableStepAnim ? "🎬 演出: ON" : "🎬 演出: OFF";
+  anBtn.classList.toggle("active", enableStepAnim);
+
+  const sdBtn = document.getElementById("soundToggleBtn");
+  sdBtn.textContent = enableSound ? "🔊 音: ON" : "🔊 音: OFF";
+  sdBtn.classList.toggle("active", enableSound);
+
+  const scBtn = document.getElementById("scoreCalcToggleBtn");
+  if (scBtn) {
+    scBtn.textContent = showScoreCalc ? "🧮 点数計算: ON" : "🧮 点数計算: OFF";
+    scBtn.classList.toggle("active", showScoreCalc);
+  }
+}
+
+function toggleShantenDisplay() {
+  showShantenDisplay = !showShantenDisplay;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleUkeireDisplay() {
+  showUkeireDisplay = !showUkeireDisplay;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleDangerMode() {
+  showDangerOverlay = !showDangerOverlay;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleYakuGuide() {
+  showYakuGuide = !showYakuGuide;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleScoreCalc() {
+  showScoreCalc = !showScoreCalc;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleRetryMode() {
+  enableRetry = !enableRetry;
+  syncToggleButtonsUI();
+  updateSettings(false);
+}
+
+function toggleTop3Eval() {
+  showTop3Eval = !showTop3Eval;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleHint() {
+  showHintOverlay = !showHintOverlay;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleOpponentHands() {
+  showOpponentHands = !showOpponentHands;
+  syncToggleButtonsUI();
+  if (latestState) renderState(latestState, true);
+}
+
+function toggleAnim() {
+  enableStepAnim = !enableStepAnim;
+  syncToggleButtonsUI();
+}
+
+function toggleSound() {
+  enableSound = !enableSound;
+  syncToggleButtonsUI();
+}
+
+function applyPlayEnvironmentPreset(isStudyMode) {
+  if (isStudyMode) {
+    showShantenDisplay = true;
+    showUkeireDisplay = true;
+    enableRetry = true;
+    showTop3Eval = true;
+    showYakuGuide = true;
+    showDangerOverlay = true;
+    showHintOverlay = false;
+    showOpponentHands = false;
+    showScoreCalc = true;
+  } else {
+    showShantenDisplay = false;
+    showUkeireDisplay = false;
+    enableRetry = false;
+    showTop3Eval = false;
+    showYakuGuide = false;
+    showDangerOverlay = false;
+    showHintOverlay = false;
+    showOpponentHands = false;
+    showScoreCalc = false;
+  }
+  syncToggleButtonsUI();
+  updateSettings(false);
+}
+
+
+async function updateSettings(redeal = false) {
+  if (redeal) {
+    animGeneration++;
+    isAnimatingSteps = false;
+  } else if (isAnimatingSteps) {
+    return;
+  }
+  const strictness_mode = document.getElementById("modeSelect").value;
+  const ai_level = parseInt(document.getElementById("aiLevelSelect").value, 10);
+  const training_theme = document.getElementById("themeSelect").value;
+  const teacher_type = document.getElementById("teacherSelect") ? document.getElementById("teacherSelect").value : "mortal";
+  const search_preset = document.getElementById("searchPresetSelect") ? document.getElementById("searchPresetSelect").value : "standard";
+  const roman_preset = document.getElementById("romanPresetSelect") ? document.getElementById("romanPresetSelect").value : "dream";
+  const speed_preset = document.getElementById("speedPresetSelect") ? document.getElementById("speedPresetSelect").value : "rapid";
+
+  if (teacher_type === "search") {
+    const descEl = document.getElementById("teacherDescText");
+    if (descEl) descEl.textContent = "⏳ 不完全情報MCTSで4人進行シミュレーションを実行中...";
+  }
+
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      strictness_mode,
+      ai_level,
+      training_theme,
+      teacher_type,
+      search_preset,
+      roman_preset,      // ← ★この1行を追加！
+      enable_retry: enableRetry,
+      speed_preset,
+      redeal
+    })
+  });
+
+  const data = await res.json();
+  renderState(data, true);
+}
+
+function getDoraCount(tileCode) {
+  if (!tileCode) return 0;
+  const isRed = (tileCode === "5mr" || tileCode === "5pr" || tileCode === "5sr");
+  const norm = isRed ? tileCode.slice(0, 2) : tileCode;
+  let cnt = isRed ? 1 : 0;
+  if (latestState && Array.isArray(latestState.actual_doras)) {
+    for (const d of latestState.actual_doras) {
+      const dn = (d === "5mr" || d === "5pr" || d === "5sr") ? d.slice(0, 2) : d;
+      if (dn === norm) cnt += 1;
+    }
+  }
+  return cnt;
+}
+
+function createTileSVG(tileCode, sizeClass = "tile-svg-hand", isDoraIndicator = false) {
+  const isRed = tileCode.endsWith("r");
+  const norm = isRed ? tileCode.slice(0, 2) : tileCode;
+  const suit = norm.length === 2 ? norm[1] : "z";
+  const num = norm.length === 2 ? parseInt(norm[0], 10) : 0;
+  const doraCount = isDoraIndicator ? 0 : getDoraCount(tileCode);
+  const isDora = doraCount > 0;
+
+  let inner = "";
+  const kanjiNums = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const redColor = "#d92626";
+  const greenColor = "#15803d";
+  const blueColor = "#1d4ed8";
+  const darkColor = "#111827";
+
+  if (suit === "m") {
+    const color = isRed ? redColor : darkColor;
+    inner = `
+      <text x="50" y="52" font-size="38" font-weight="900" font-family="serif" fill="${color}" text-anchor="middle">${kanjiNums[num]}</text>
+      <text x="50" y="108" font-size="40" font-weight="900" font-family="serif" fill="${redColor}" text-anchor="middle">萬</text>
+    `;
+  } else if (suit === "p") {
+    const c = isRed ? redColor : blueColor;
+    const g = greenColor;
+    const r = redColor;
+    const circles = {
+      1: [[50,70,26,r], [50,70,12,"#fff"], [50,70,6,r]],
+      2: [[50,42,16,g], [50,98,16,c]],
+      3: [[28,36,14,g], [50,70,14,r], [72,104,14,c]],
+      4: [[32,42,15,c], [68,42,15,g], [32,98,15,g], [68,98,15,c]],
+      5: [[30,38,14,c], [70,38,14,g], [50,70,14,r], [30,102,14,g], [70,102,14,c]],
+      6: [[32,36,13,g], [68,36,13,g], [32,74,13,r], [68,74,13,r], [32,104,13,r], [68,104,13,r]],
+      7: [[26,30,11,g], [50,40,11,g], [74,50,11,g], [33,80,12,r], [67,80,12,r], [33,106,12,r], [67,106,12,r]],
+      8: [[33,28,11,c], [67,28,11,c], [33,56,11,c], [67,56,11,c], [33,84,11,c], [67,84,11,c], [33,112,11,c], [67,112,11,c]],
+      9: [[26,34,11,g], [50,34,11,g], [74,34,11,g], [26,70,11,r], [50,70,11,r], [74,70,11,r], [26,106,11,c], [50,106,11,c], [74,106,11,c]],
+    }[num] || [];
+    inner = circles.map(([cx, cy, rad, col]) =>
+      `<circle cx="${cx}" cy="${cy}" r="${rad}" fill="${col}" stroke="#fff" stroke-width="1.5"/>`
+    ).join("");
+  } else if (suit === "s") {
+    const col = isRed ? redColor : greenColor;
+    const stick = (x, y, h, color = col) =>
+      `<rect x="${x-5}" y="${y}" width="10" height="${h}" rx="4" fill="${color}" stroke="#fff" stroke-width="1"/>`;
+    if (num === 1) {
+      inner = `
+        <circle cx="50" cy="62" r="24" fill="${greenColor}" opacity="0.18"/>
+        <text x="50" y="68" font-size="38" font-weight="bold" fill="${greenColor}" text-anchor="middle">鳥</text>
+        <text x="50" y="108" font-size="24" font-weight="bold" fill="${redColor}" text-anchor="middle">一索</text>
+      `;
+    } else {
+      const layouts = {
+        2: [[50,24,40,col], [50,74,40,col]],
+        3: [[50,22,40,col], [32,74,40,col], [68,74,40,col]],
+        4: [[32,24,40,col], [68,24,40,col], [32,74,40,col], [68,74,40,col]],
+        5: [[26,24,40,col], [74,24,40,col], [50,50,40,redColor], [26,74,40,col], [74,74,40,col]],
+        6: [[26,24,40,col], [50,24,40,col], [74,24,40,col], [26,74,40,col], [50,74,40,col], [74,74,40,col]],
+        7: [[50,18,32,redColor], [26,56,30,col], [50,56,30,col], [74,56,30,col], [26,90,30,col], [50,90,30,col], [74,90,30,col]],
+        8: [[24,24,40,col], [42,24,40,col], [58,24,40,col], [76,24,40,col], [24,74,40,col], [42,74,40,col], [58,74,40,col], [76,74,40,col]],
+        9: [[26,18,30,col], [50,18,30,redColor], [74,18,30,col], [26,54,30,col], [50,54,30,redColor], [74,54,30,col], [26,90,30,col], [50,90,30,redColor], [74,90,30,col]],
+      }[num] || [];
+      inner = layouts.map(([x, y, h, c]) => stick(x, y, h, c)).join("");
+    }
+  } else {
+    const zMap = {
+      E: ["東", darkColor], S: ["南", darkColor], W: ["西", darkColor], N: ["北", darkColor],
+      P: ["", blueColor], F: ["發", greenColor], C: ["中", redColor]
+    };
+    const [ch, col] = zMap[norm] || [norm, darkColor];
+    if (norm === "P") {
+      inner = `<rect x="20" y="24" width="60" height="90" rx="8" fill="none" stroke="#94a3b8" stroke-width="4" stroke-dasharray="6,3"/>`;
+    } else {
+      inner = `<text x="50" y="88" font-size="60" font-weight="900" font-family="serif" fill="${col}" text-anchor="middle">${ch}</text>`;
+    }
+  }
+
+  const redBadge = isRed ? `<circle cx="82" cy="24" r="9" fill="${redColor}" stroke="#fff" stroke-width="1.5"/>` : "";
+
+  const doraDefs = isDora ? `
+    <defs>
+      <linearGradient id="doraFaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fffef5"/>
+        <stop offset="65%" stop-color="#fef9c3"/>
+        <stop offset="100%" stop-color="#fde68a"/>
+      </linearGradient>
+      <clipPath id="doraFaceClip">
+        <rect x="4" y="4" width="92" height="122" rx="10"/>
+      </clipPath>
+    </defs>
+  ` : "";
+
+  const doraOverlay = isDora ? `
+    <g clip-path="url(#doraFaceClip)">
+      <rect class="dora-shine-bar" x="0" y="-20" width="42" height="170" fill="rgba(255, 255, 255, 0.72)"/>
+    </g>
+    <path class="dora-sparkle sp-1" d="M18,10 L20.2,17.8 L28,20 L20.2,22.2 L18,30 L15.8,22.2 L8,20 L15.8,17.8 Z" fill="#f59e0b" stroke="#fff" stroke-width="1.2"/>
+    <path class="dora-sparkle sp-2" d="M82,96 L84,103 L91,105 L84,107 L82,114 L80,107 L73,105 L80,103 Z" fill="#f59e0b" stroke="#fff" stroke-width="1.2"/>
+  ` : "";
+
+  const faceFill = isDora ? "url(#doraFaceGrad)" : "#fffbeb";
+  const borderCls = isDora ? "dora-border-rect" : "";
+  const borderStroke = isDora ? "#f59e0b" : "#d1d5db";
+  const borderWidth = isDora ? "3.8" : "2";
+
+  return `
+    <svg class="${sizeClass} ${isDora ? 'dora-tile-svg' : ''}" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
+      ${doraDefs}
+      <rect x="2" y="8" width="96" height="130" rx="12" fill="${isDora ? '#b45309' : '#d97706'}"/>
+      <rect class="${borderCls}" x="2" y="2" width="96" height="126" rx="12" fill="${faceFill}" stroke="${borderStroke}" stroke-width="${borderWidth}"/>
+      ${inner}
+      ${redBadge}
+      ${doraOverlay}
+    </svg>
+  `;
+}
+
+function normTile(t) {
+  return (t === "5mr" || t === "5pr" || t === "5sr") ? t.slice(0, 2) : t;
+}
+
+function isChoiceAllowed(tileCode, allowedList) {
+  if (allowedList.includes(tileCode)) return true;
+  return allowedList.some(a => normTile(a) === normTile(tileCode));
+}
+
+function getHintForTile(tileCode, hintMap) {
+  if (!hintMap) return null;
+  if (hintMap[tileCode]) return hintMap[tileCode];
+  const key = Object.keys(hintMap).find(k => normTile(k) === normTile(tileCode));
+  return key ? hintMap[key] : null;
+}
+
+function shantenText(s) {
+  if (s <= -1) return "和了形";
+  if (s === 0) return "聴牌（テンパイ）";
+  return `${s}シャンテン`;
+}
+
+function onHoverHandTile(tileCode) {
+  const targetNorm = tileCode ? normTile(tileCode) : "";
+
+  document.querySelectorAll("[data-tile-norm]").forEach(el => {
+    el.classList.toggle("same-tile-glow", Boolean(tileCode) && el.getAttribute("data-tile-norm") === targetNorm);
+  });
+
+  if (latestState && latestState.tenpai_info) {
+    renderTenpaiBar(latestState.tenpai_info, tileCode);
+  }
+
+  if (showDangerOverlay && latestState && latestState.danger_info) {
+    const di = latestState.danger_info;
+    const textEl = document.getElementById("dangerExplainText");
+    if (tileCode && di.tiles && di.tiles[tileCode]) {
+      textEl.innerHTML = `<strong style="color:#fde047;">[${tileCode}] の守備解析：</strong> ${di.tiles[tileCode].reason}`;
+    } else {
+      textEl.textContent = di.summary_text;
+    }
+  }
+}
+
+function showCutin(text) {
+  const banner = document.getElementById("cutinBanner");
+  banner.textContent = text;
+  banner.style.display = "block";
+  setTimeout(() => { banner.style.display = "none"; }, 850);
+}
+
+const SHORT_SEAT_NAMES = ["自家(あなた)", "下家", "対面", "上家"];
+let callArrowTimer = null;
+
+function clearCallArrow() {
+  if (callArrowTimer) {
+    clearTimeout(callArrowTimer);
+    callArrowTimer = null;
+  }
+  const svg = document.getElementById("callArrowOverlay");
+  if (svg) svg.innerHTML = "";
+  for (let i = 0; i < 4; i++) {
+    const sb = document.getElementById(`seatBox${i}`);
+    if (sb) {
+      sb.classList.remove("call-actor-highlight", "call-target-highlight");
+    }
+  }
+}
+
+function showCallArrow(actorPid, targetPid, labelText = "ポン！", durationMs = 880) {
+  clearCallArrow();
+  if (actorPid === undefined || targetPid === undefined || actorPid === null || targetPid === null) return;
+  if (actorPid === targetPid) return; // ツモ・暗槓・リーチなど単独行動では矢印を出さない
+
+  const tableEl = document.querySelector(".mahjong-table-outer");
+  const svg = document.getElementById("callArrowOverlay");
+  const actorBox = document.getElementById(`seatBox${actorPid}`);
+  const targetBox = document.getElementById(`seatBox${targetPid}`);
+  if (!tableEl || !svg || !actorBox || !targetBox) return;
+
+  actorBox.classList.add("call-actor-highlight");
+  targetBox.classList.add("call-target-highlight");
+
+  const tRect = tableEl.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${tRect.width} ${tRect.height}`);
+
+  // 起点: 鳴いた人の座席ボックス中心
+  const aRect = actorBox.getBoundingClientRect();
+  const ax = aRect.left - tRect.left + aRect.width / 2;
+  const ay = aRect.top - tRect.top + aRect.height / 2;
+
+  // 終点: 取られる人の河の最新牌（なければ座席ボックス中心）
+  const targetRiver = document.getElementById(`river${targetPid}`);
+  const lastTileEl = targetRiver ? targetRiver.querySelector(".river-tile-wrap:last-child") : null;
+  const endRefRect = lastTileEl ? lastTileEl.getBoundingClientRect() : targetBox.getBoundingClientRect();
+  const tx = endRefRect.left - tRect.left + endRefRect.width / 2;
+  const ty = endRefRect.top - tRect.top + endRefRect.height / 2;
+
+  // 起点・終点を少しだけ内側にオフセットして見やすくする
+  const dx = tx - ax;
+  const dy = ty - ay;
+  const dist = Math.hypot(dx, dy) || 1;
+  const startOffset = Math.min(36, dist * 0.18);
+  const endOffset = lastTileEl ? 10 : Math.min(30, dist * 0.15);
+
+  const x1 = ax + (dx / dist) * startOffset;
+  const y1 = ay + (dy / dist) * startOffset;
+  const x2 = tx - (dx / dist) * endOffset;
+  const y2 = ty - (dy / dist) * endOffset;
+
+  const isRon = labelText.includes("ロン");
+  const mainColor = isRon ? "#ef4444" : "#fbbf24";
+  const glowColor = isRon ? "#fca5a5" : "#38bdf8";
+
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const badgeText = `${SHORT_SEAT_NAMES[actorPid]} ➔ ${SHORT_SEAT_NAMES[targetPid]}`;
+
+  svg.innerHTML = `
+    <defs>
+      <filter id="arrowGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="${glowColor}" flood-opacity="0.95"/>
+      </filter>
+      <marker id="callArrowHead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="${mainColor}" stroke="#fff" stroke-width="0.8"/>
+      </marker>
+    </defs>
+
+    <!-- 起点（鳴いた人）のサークル -->
+    <circle cx="${x1}" cy="${y1}" r="8" fill="#38bdf8" stroke="#fff" stroke-width="2" filter="url(#arrowGlow)"/>
+
+    <!-- 終点（取られた牌）の波紋リング -->
+    <circle class="call-target-ring" cx="${tx}" cy="${ty}" r="18" fill="none" stroke="${mainColor}" stroke-width="3.5"/>
+    <circle cx="${tx}" cy="${ty}" r="6" fill="${mainColor}" stroke="#fff" stroke-width="1.5"/>
+
+    <!-- 鳴いた人から取られた人へ伸びる矢印ライン -->
+    <line class="call-arrow-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+          stroke="${mainColor}" stroke-width="6.5" filter="url(#arrowGlow)" marker-end="url(#callArrowHead)"/>
+
+    <!-- 矢印中央のラベルバッジ -->
+    <g transform="translate(${mx}, ${my})">
+      <rect x="-92" y="-16" width="184" height="32" rx="16" fill="rgba(15, 23, 42, 0.94)" stroke="${mainColor}" stroke-width="2" filter="url(#arrowGlow)"/>
+      <text x="0" y="5" fill="#ffffff" font-size="13" font-weight="900" text-anchor="middle">${badgeText}</text>
+    </g>
+  `;
+
+  if (durationMs > 0) {
+    callArrowTimer = setTimeout(() => {
+      clearCallArrow();
+    }, durationMs);
+  }
+}
+
+function setActiveTurnSeat(pid) {
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`seatBox${i}`);
+    if (el) el.classList.toggle("active-turn", i === pid);
+  }
+}
+
+function renderRiverTiles(pid, discardsList, highlightLast = false) {
+  const container = document.getElementById(`river${pid}`);
+  if (!container) return;
+  container.innerHTML = discardsList.map((d, idx) => {
+    const isLast = highlightLast && idx === discardsList.length - 1;
+    const opacity = d.tsumogiri ? "opacity:0.82;" : "";
+    const calledCls = d.called_by_name ? "river-called-wrap" : "";
+    const cls = [
+      "river-tile-wrap",
+      d.is_riichi ? "riichi-sideways" : "",
+      isLast ? "new-discard-anim" : "",
+      calledCls
+    ].join(" ");
+    const calledTagHtml = d.called_by_name
+      ? `<span class="river-called-tag">${d.call_type}:${d.called_by_name.replace('(あなた)','')}</span>`
+      : "";
+    const titleStr = [
+      d.tsumogiri ? "ツモ切り" : "手出し",
+      d.is_riichi ? "(リーチ宣言牌)" : "",
+      d.called_by_name ? `【${d.called_by_name}が${d.call_type}】` : ""
+    ].filter(Boolean).join(" ");
+    return `
+      <div class="${cls}" style="${opacity}" data-tile-norm="${normTile(d.pai)}" title="${titleStr}">
+        ${createTileSVG(d.pai, "tile-svg-river")}
+        ${calledTagHtml}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderWallVisual(wallRem, doraMarkers) {
+  document.getElementById("wallRemText").textContent = wallRem;
+  document.getElementById("doraContainer").innerHTML =
+    (doraMarkers || []).map(d => createTileSVG(d, "tile-svg-dora", true)).join("");
+
+  const liveStacks = Math.ceil((wallRem || 0) / 2);
+  const deadStacks = 7;
+  let blocksHtml = "";
+  for (let i = 0; i < liveStacks; i++) {
+    blocksHtml += `<span class="wall-stack-unit"></span>`;
+  }
+  for (let i = 0; i < deadStacks; i++) {
+    blocksHtml += `<span class="wall-stack-unit dead-wall"></span>`;
+  }
+  document.getElementById("wallBlocksTrack").innerHTML = blocksHtml;
+}
+
+function renderDiscardChip(item, isHovered = false) {
+  const waitsHtml = (item.waits || []).slice(0, 12).map(w => `
+    <div class="wait-tile-unit" data-tile-norm="${normTile(w.tile)}">
+      ${createTileSVG(w.tile, "tile-svg-wait")}
+      <span class="wait-rem-label">残${w.remaining}${w.in_river ? '(河)' : ''}</span>
+    </div>
+  `).join("");
+  const moreNote = (item.waits && item.waits.length > 12)
+    ? `<span style="font-size:0.72rem; color:#9ca3af;">他${item.waits.length - 12}種</span>`
+    : "";
+
+  let statusTag = "";
+  if (item.is_tenpai) {
+    if (showShantenDisplay) {
+      statusTag = item.is_furiten
+        ? `<span style="background:#dc2626; color:#fff; font-size:0.72rem; font-weight:bold; padding:2px 6px; border-radius:4px;">🚨フリテン聴牌 (${item.ukeire_types}種${item.total_remaining}枚)</span>`
+        : `<span style="background:#10b981; color:#000; font-size:0.72rem; font-weight:bold; padding:2px 6px; border-radius:4px;">🔥聴牌 待ち${item.ukeire_types}種 残${item.total_remaining}枚</span>`;
+    } else {
+      statusTag = `<span style="background:#0284c7; color:#fff; font-size:0.72rem; font-weight:bold; padding:2px 6px; border-radius:4px;">有効牌 ${item.ukeire_types}種 残${item.total_remaining}枚</span>`;
+    }
+  } else if (item.is_shanten_back) {
+    const shNote = showShantenDisplay ? `${shantenText(item.shanten)} / ` : "";
+    statusTag = `<span style="background:#4b5563; color:#fde047; font-size:0.72rem; font-weight:bold; padding:2px 6px; border-radius:4px;">⚠️戻し (${shNote}有効牌${item.ukeire_types}種${item.total_remaining}枚)</span>`;
+  } else {
+    statusTag = `<span style="background:#0284c7; color:#fff; font-size:0.72rem; font-weight:bold; padding:2px 6px; border-radius:4px;">有効牌 ${item.ukeire_types}種 残${item.total_remaining}枚</span>`;
+  }
+
+  return `
+    <div class="wait-discard-chip ${isHovered ? 'active-hover' : ''}" data-discard="${item.discard}">
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem; color:#9ca3af;">打</div>
+        ${createTileSVG(item.discard, "tile-svg-dora")}
+      </div>
+      <span style="font-weight:bold; color:#fbbf24;">➡</span>
+      <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">${waitsHtml}${moreNote}</div>
+      ${statusTag}
+    </div>
+  `;
+}
+
+function renderTenpaiBar(tp, hoveredTile = "") {
+  const bar = document.getElementById("tenpaiBar");
+  if (!tp || (!showShantenDisplay && !showUkeireDisplay)) {
+    bar.style.display = "none";
+    return;
+  }
+
+  const curS = tp.current_shanten ?? 1;
+  const isTenpaiMode = (curS <= 0) || tp.is_13_tenpai || tp.has_tenpai_discards;
+
+  bar.classList.toggle("is-tenpai-mode", showShantenDisplay && isTenpaiMode);
+  bar.classList.toggle("is-furiten", showShantenDisplay && Boolean(tp.base_is_furiten));
+  bar.classList.toggle("shanten-only-mode", !showUkeireDisplay && showShantenDisplay);
+
+  const subShantenParts = [];
+  if (showShantenDisplay) {
+    if (tp.std_shanten !== undefined && tp.std_shanten < 90) subShantenParts.push(`一般:${shantenText(tp.std_shanten)}`);
+    if (tp.chiitoi_shanten !== undefined && tp.chiitoi_shanten < 90) subShantenParts.push(`七対子:${shantenText(tp.chiitoi_shanten)}`);
+    if (tp.kokushi_shanten !== undefined && tp.kokushi_shanten <= 4) subShantenParts.push(`国士:${shantenText(tp.kokushi_shanten)}`);
+  }
+  const subShantenStr = subShantenParts.length > 0 ? `（${subShantenParts.join(" / ")}）` : "";
+
+  // 役なし警告・フリテン警告は高さを変えないよう1行目のインラインバッジに統合
+  let inlineAlerts = "";
+  if (showShantenDisplay && tp.yaku_warning) {
+    inlineAlerts += `<span class="inline-alert-pill" style="background:#b45309; border:1px solid #fbbf24;" title="${tp.yaku_warning}">🚨役なし注意</span>`;
+  }
+  if (showShantenDisplay && tp.is_13_tenpai && tp.base_is_furiten) {
+    inlineAlerts += `<span class="inline-alert-pill" title="自分の河に待ち牌があるためロン和了不可（ツモのみ）">🚨フリテン(${tp.base_furiten_tiles.join(",")})</span>`;
+  }
+
+  const uMap = tp.discard_ukeire_map || {};
+  const hoveredItem = hoveredTile ? (uMap[hoveredTile] || uMap[normTile(hoveredTile)]) : null;
+
+  let html = "";
+
+  if (showUkeireDisplay) {
+    if (hoveredItem) {
+      const shLabel = showShantenDisplay ? `切った後: ${shantenText(hoveredItem.shanten)}` : "";
+      html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+            <span style="font-weight:bold; font-size:0.8rem; color:#fde047;">
+              🔍 【打 ${hoveredTile} の${(showShantenDisplay && hoveredItem.is_tenpai) ? '待ち牌' : '有効牌'}】 ${shLabel}
+            </span>
+            ${inlineAlerts}
+          </div>
+          <span style="font-size:0.72rem; color:#cbd5e1;">${subShantenStr}</span>
+        </div>
+        <div class="waits-row">${renderDiscardChip(hoveredItem, true)}</div>
+      `;
+    } else if (tp.has_tenpai_discards && showShantenDisplay) {
+      const headerTitle = tp.is_13_tenpai
+        ? "🔥 【現在 聴牌中！】 打牌別の待ち牌・残り枚数"
+        : "⚡ 【聴牌可能！】 以下の打牌でテンパイします";
+      const chipsHtml = tp.tenpai_discards.slice(0, 3).map(item => renderDiscardChip(item, false)).join("");
+      html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+            <span style="font-weight:bold; font-size:0.8rem; color:#a7f3d0;">${headerTitle}</span>
+            ${inlineAlerts}
+          </div>
+          <span style="font-size:0.72rem; color:#cbd5e1;">${subShantenStr}</span>
+        </div>
+        <div class="waits-row">${chipsHtml}</div>
+      `;
+    } else if (tp.best_ukeire_discards && tp.best_ukeire_discards.length > 0) {
+      const topUkeire = tp.best_ukeire_discards.slice(0, 3);
+      const chipsHtml = topUkeire.map(item => renderDiscardChip(item, false)).join("");
+      const prefixTitle = showShantenDisplay ? `📐 【現在: ${shantenText(curS)}】 ` : "🀄 ";
+      html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+            <span style="font-weight:bold; font-size:0.8rem; color:#7dd3fc;">
+              ${prefixTitle}有効牌が多い打牌トップ3 （手牌ホバーで各牌の有効牌を表示）
+            </span>
+            ${inlineAlerts}
+          </div>
+          <span style="font-size:0.72rem; color:#cbd5e1;">${subShantenStr}</span>
+        </div>
+        <div class="waits-row">${chipsHtml}</div>
+      `;
+    } else if (tp.base_waits && tp.base_waits.length > 0) {
+      const waitsHtml = tp.base_waits.slice(0, 12).map(w => `
+        <div class="wait-tile-unit" data-tile-norm="${normTile(w.tile)}">
+          ${createTileSVG(w.tile, "tile-svg-wait")}
+          <span class="wait-rem-label">残${w.remaining}${w.in_river ? '(河)' : ''}</span>
+        </div>
+      `).join("");
+      const labelStr = showShantenDisplay
+        ? (tp.is_13_tenpai ? "🔥 【聴牌中！】 待ち牌:" : `📐 【現在: ${shantenText(curS)}】 有効牌:`)
+        : "🀄 【現在の有効牌】:";
+      html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-weight:900; font-size:0.8rem; color:#7dd3fc;">${labelStr}</span>
+            <span style="background:#0284c7; color:#fff; font-weight:bold; padding:1px 6px; border-radius:4px; font-size:0.72rem;">
+              計 ${tp.base_waits.length}種 残${tp.base_total_remaining}枚
+            </span>
+            ${inlineAlerts}
+          </div>
+          <span style="font-size:0.72rem; color:#cbd5e1;">${subShantenStr}</span>
+        </div>
+        <div class="waits-row">${waitsHtml}</div>
+      `;
+    } else {
+      html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <span style="font-weight:bold; font-size:0.8rem; color:#7dd3fc;">📐 ${showShantenDisplay ? shantenText(curS) : '有効牌解析'} ${inlineAlerts}</span>
+          <span style="font-size:0.72rem; color:#cbd5e1;">${subShantenStr}</span>
+        </div>
+      `;
+    }
+  } else if (showShantenDisplay) {
+    let hoveredNote = "";
+    if (hoveredItem) {
+      hoveredNote = `<span style="color:#fde047; margin-left:8px;">➡ 打 [${hoveredTile}] 後: <strong>${shantenText(hoveredItem.shanten)}</strong></span>`;
+    }
+    html = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-weight:bold; font-size:0.84rem; color:${isTenpaiMode ? '#a7f3d0' : '#7dd3fc'};">
+            📐 【現在: ${shantenText(curS)}】${hoveredNote}
+          </span>
+          ${inlineAlerts}
+        </div>
+        <span style="font-size:0.74rem; color:#cbd5e1;">${subShantenStr}</span>
+      </div>
+    `;
+  }
+
+  bar.style.display = "flex";
+  bar.innerHTML = html;
+}
+
+function renderDangerBanner(dangerInfo) {
+  const banner = document.getElementById("dangerExplainBanner");
+  const textEl = document.getElementById("dangerExplainText");
+  if (!showDangerOverlay || !dangerInfo) {
+    banner.style.display = "none";
+    return;
+  }
+  banner.style.display = "flex";
+  banner.classList.toggle("has-threat", Boolean(dangerInfo.active));
+  textEl.textContent = dangerInfo.summary_text;
+}
+
+function renderStatsAndLog(stats) {
+  const statsGrid = document.getElementById("statsGridBox");
+  const logBox = document.getElementById("mistakeLogBox");
+
+  if (!showTop3Eval || !stats) {
+    if (statsGrid) statsGrid.style.display = "none";
+    if (logBox) logBox.style.display = "none";
+    return;
+  }
+
+  if (statsGrid) statsGrid.style.display = "grid";
+
+  const total = stats.total_turns || 0;
+  const goodRate = total > 0 ? Math.round((stats.first_try_good / total) * 100) : 100;
+  const top1Rate = total > 0 ? Math.round((stats.top1_matches / total) * 100) : 100;
+
+  document.getElementById("statGoodRate").textContent = total > 0 ? `${goodRate}% (${stats.first_try_good}/${total})` : "--%";
+  document.getElementById("statTop1Rate").textContent = total > 0 ? `${top1Rate}% (${stats.top1_matches}/${total})` : "--%";
+  document.getElementById("statMistakes").textContent = `${stats.mistakes}回`;
+
+  const logList = document.getElementById("mistakeLogList");
+  if (stats.mistake_log && stats.mistake_log.length > 0) {
+    logBox.style.display = "block";
+    logList.innerHTML = stats.mistake_log.map(m => `
+      <div class="mistake-log-item">
+        <div style="color:#fca5a5; font-weight:bold;">${m.round}</div>
+        <div>選択: <strong>${m.chosen}</strong> (${m.chosen_rank}位/${m.chosen_score}点) ➡ 最善: <strong style="color:#fbbf24;">${m.best}</strong> (${m.best_score}点)</div>
+      </div>
+    `).join("");
+  } else {
+    logBox.style.display = "none";
+  }
+}
+
+function renderPotentialYakus(yakuList) {
+  const box = document.getElementById("yakuGuideBox");
+  const container = document.getElementById("potentialYakuList");
+  if (!showYakuGuide) {
+    if (box) box.style.display = "none";
+    return;
+  }
+  if (box) box.style.display = "block";
+
+  if (!yakuList || yakuList.length === 0) {
+    container.innerHTML = `<div style="font-size:0.78rem; color:#9ca3af;">現在目立った役候補はありません（門前リーチやドラを意識しましょう）</div>`;
+    return;
+  }
+
+  container.innerHTML = yakuList.map(y => {
+    let statusCls = "status-candidate";
+    if (y.status === "確定" || y.status === "確定圏内" || y.status === "保有中") {
+      statusCls = "status-confirmed";
+    } else if (y.status === "有力") {
+      statusCls = "status-strong";
+    }
+    return `
+      <div class="yaku-item">
+        <div class="yaku-item-top">
+          <span class="yaku-name">${y.name}</span>
+          <div>
+            <span class="badge-status ${statusCls}">${y.status}</span>
+            <span class="badge-han">${y.han}</span>
+          </div>
+        </div>
+        <div class="yaku-desc">${y.desc}</div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width:${y.progress}%;"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+
+function renderRealtimeScoreEstimate(scEst) {
+  const box = document.getElementById("scoreEstimateBox");
+  const titleEl = document.getElementById("scoreEstimateTitle");
+  const contentEl = document.getElementById("scoreEstimateContent");
+  if (!box) return;
+  if (!showScoreCalc || !scEst) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "block";
+  titleEl.textContent = scEst.title || "🧮 リアルタイム点数・符・飜計算";
+
+  if (scEst.mode === "tenpai" && scEst.wait_calcs && scEst.wait_calcs.length > 0) {
+    contentEl.innerHTML = scEst.wait_calcs.map(w => `
+      <div class="score-calc-item">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${createTileSVG(w.wait_tile, "tile-svg-dora")}
+            <strong style="color:#fde047; font-size:0.84rem;">当たり牌: ${w.wait_tile_ja} (残${w.remaining}枚)</strong>
+          </div>
+          <span style="font-size:0.72rem; color:#93c5fd;">${w.yaku_summary}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; background:rgba(0,0,0,0.35); padding:4px 7px; border-radius:4px;">
+          <div>🎯 <strong>ロン:</strong> <span style="color:#34d399; font-weight:bold;">${w.ron_text}</span></div>
+          <div>⚡ <strong>ツモ:</strong> <span style="color:#fbbf24; font-weight:bold;">${w.tsumo_text}</span></div>
+        </div>
+        <div style="font-size:0.7rem; color:#cbd5e1; margin-top:3px;">📐 符内訳: ${w.fu_summary}</div>
+        ${w.riichi_note ? `<div style="font-size:0.7rem; color:#fca5a5; margin-top:2px;">🔥 ${w.riichi_note}</div>` : ""}
+      </div>
+    `).join("");
+    return;
+  }
+
+  const fuBar = scEst.fu_progress_text
+    ? `<div style="font-size:0.73rem; color:#fde68a; background:rgba(180,83,9,0.25); border:1px solid rgba(251,191,36,0.35); padding:4px 8px; border-radius:5px; margin-bottom:6px;">📐 ${scEst.fu_progress_text}</div>`
+    : "";
+
+  if (!scEst.estimates || scEst.estimates.length === 0) {
+    contentEl.innerHTML = fuBar + `<div style="font-size:0.76rem; color:#9ca3af;">手牌進行に応じて予想打点を算出します</div>`;
+    return;
+  }
+
+  contentEl.innerHTML = fuBar + scEst.estimates.map(e => `
+    <div class="score-calc-item">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+        <strong style="color:#f9fafb; font-size:0.82rem;">${e.route_name}</strong>
+        <span style="background:#374151; color:#fbbf24; font-size:0.7rem; font-weight:bold; padding:1px 6px; border-radius:4px;">${e.fu_han_text}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:8px; font-size:0.76rem;">
+        <span style="color:#34d399; font-weight:bold;">${e.ron_text}</span>
+        <span style="color:#93c5fd; font-weight:bold;">${e.tsumo_text}</span>
+      </div>
+      <div style="font-size:0.68rem; color:#9ca3af; margin-top:2px;">💡 ${e.formula_hint}</div>
+    </div>
+  `).join("");
+}
+
+let currentRoundReviewList = [];
+
+function renderActionVisualMini(actCode, labelText) {
+  const specialCodes = ["none","reach","pon","chi_low","chi_mid","chi_high","kan","hora","ryukyoku"];
+  if (!specialCodes.includes(actCode)) {
+    return createTileSVG(actCode, "tile-svg-dora");
+  }
+  return `<span style="font-weight:bold; color:#fde047; padding:2px 6px; background:rgba(255,255,255,0.1); border-radius:4px;">${labelText}</span>`;
+}
+
+function buildRoundReviewHtml(reviewList) {
+  currentRoundReviewList = reviewList || [];
+  if (currentRoundReviewList.length === 0) {
+    return `
+      <div class="review-section-box" style="border-color:#10b981; background:rgba(6, 78, 59, 0.35); text-align:center;">
+        <span style="color:#34d399; font-weight:900; font-size:0.92rem;">
+          ✨ 今局はすべての手番で Mortal AI 第1位（最善手）と完全一致しました！（1位以外の選択：0件）
+        </span>
+      </div>
+    `;
+  }
+
+  const cardsHtml = currentRoundReviewList.map((item, idx) => {
+    const isBad = !item.is_acceptable;
+    const statusBadge = isBad
+      ? `<span style="background:#dc2626; color:#fff; font-size:0.68rem; font-weight:bold; padding:1px 6px; border-radius:4px;">悪手・基準外</span>`
+      : `<span style="background:#d97706; color:#000; font-size:0.68rem; font-weight:bold; padding:1px 6px; border-radius:4px;">次善・合格圏</span>`;
+
+    const handTilesHtml = (item.hand || []).map(t => createTileSVG(t, "tile-svg-meld")).join("");
+    let extraTileHtml = "";
+    if (item.drawn_tile) {
+      extraTileHtml = `<span style="margin-left:5px; padding-left:5px; border-left:1px dashed rgba(255,255,255,0.4); display:inline-flex; align-items:center; gap:2px;"><span style="font-size:0.64rem; color:#fbbf24;">ツモ</span>${createTileSVG(item.drawn_tile, "tile-svg-meld")}</span>`;
+    } else if (item.is_call_chance && item.call_target_pai) {
+      extraTileHtml = `<span style="margin-left:5px; padding-left:5px; border-left:1px dashed rgba(255,255,255,0.4); display:inline-flex; align-items:center; gap:2px;"><span style="font-size:0.64rem; color:#38bdf8;">鳴き対象</span>${createTileSVG(item.call_target_pai, "tile-svg-meld")}</span>`;
+    }
+
+    return `
+      <div class="review-item-card ${isBad ? 'is-bad-review' : ''}">
+        <div class="review-card-top">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <strong style="color:#fde047; font-size:0.86rem;">📍 ${item.turn_num}巡目</strong>
+            ${statusBadge}
+            <div class="review-compare-badge">
+              <span style="color:#fca5a5;">あなた:</span>
+              ${renderActionVisualMini(item.chosen, item.chosen_label)}
+              <span style="font-size:0.74rem; color:#d1d5db;">(${item.chosen_rank}位 / ${item.chosen_score}点)</span>
+              <span style="color:#fbbf24; font-weight:900; margin:0 2px;">➡</span>
+              <span style="color:#34d399; font-weight:bold;">AI 1位:</span>
+              ${renderActionVisualMini(item.best, item.best_label)}
+              <span style="font-size:0.74rem; color:#fde68a;">(100点 / 推奨${item.best_prob}%)</span>
+            </div>
+          </div>
+          <div class="review-btn-group">
+            <button class="review-prompt-btn" onclick="openReviewPromptModal(${idx})">
+              💬 解説プロンプト
+            </button>
+            <button class="review-copy-btn" onclick="copyReviewPromptDirect(${idx}, this)">
+              📋 即コピー
+            </button>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="review-mini-hand" title="当時の手牌">
+            ${handTilesHtml}${extraTileHtml}
+          </div>
+          <div style="flex:1; min-width:220px; font-size:0.74rem; color:#cbd5e1; line-height:1.4;">
+            ${item.reason_summary || ""}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="review-section-box">
+      <div class="review-header-row">
+        <div>
+          <span style="font-weight:900; color:#38bdf8; font-size:0.95rem;">
+            🔍 今局の振り返りリスト（AI第1位以外を選択した場面：全 ${currentRoundReviewList.length} 件）
+          </span>
+          <span style="font-size:0.72rem; color:#9ca3af; margin-left:6px;">※次の局が始まるとクリアされます</span>
+        </div>
+        <button class="review-prompt-btn" style="background:linear-gradient(180deg, #7c3aed, #6d28d9); border-color:#c4b5fd;" onclick="openBatchReviewPromptModal()">
+          📚 全${currentRoundReviewList.length}件をまとめた一括質問プロンプト
+        </button>
+      </div>
+      <div class="review-list-scroll">
+        ${cardsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function openReviewPromptModal(idx) {
+  const item = currentRoundReviewList[idx];
+  if (!item || !item.ai_prompt) return;
+  lastDecisionPromptText = item.ai_prompt;
+  switchPromptModalTab("last");
+  document.getElementById("aiPromptModal").style.display = "flex";
+}
+
+async function copyReviewPromptDirect(idx, btnEl) {
+  const item = currentRoundReviewList[idx];
+  if (!item || !item.ai_prompt) return;
+  try {
+    await navigator.clipboard.writeText(item.ai_prompt);
+    const orig = btnEl.textContent;
+    btnEl.textContent = "✅ コピー完了！";
+    btnEl.style.background = "#d97706";
+    setTimeout(() => {
+      btnEl.textContent = orig;
+      btnEl.style.background = "#059669";
+    }, 2000);
+  } catch (e) {
+    openReviewPromptModal(idx);
+  }
+}
+
+function openBatchReviewPromptModal() {
+  if (!currentRoundReviewList || currentRoundReviewList.length === 0) return;
+  const header = `以下の麻雀の1局において、私がMortal AIの第1位（最善手）以外を選択した全 ${currentRoundReviewList.length} 場面の振り返りデータです。各場面でなぜAI第1位の手が優れているのか、重要度の高いポイントから順に解説してください。\n\n`;
+  const body = currentRoundReviewList.map((item, i) =>
+    `========================================\n【振り返り 第${i + 1}場面：${item.round_turn_str}】\n` +
+    `・あなたの選択: ${item.chosen_label} (AI評価 ${item.chosen_rank}位 / ${item.chosen_score}点)\n` +
+    `・Mortal AI 第1位: ${item.best_label} (100点 / 推奨度 ${item.best_prob}%)\n----------------------------------------\n` +
+    item.ai_prompt
+  ).join("\n\n");
+  lastDecisionPromptText = header + body;
+  switchPromptModalTab("last");
+  document.getElementById("aiPromptModal").style.display = "flex";
+}
+
+function showRoundResultModal(res) {
+  playSE("hora");
+  const modal = document.getElementById("roundResultModal");
+  const content = document.getElementById("roundResultContent");
+  const seatLabels = ["自家 (あなた)", "下家 (AI)", "対面 (AI)", "上家 (AI)"];
+  const isGameDone = Boolean(latestState && latestState.done);
+
+  const deltasHtml = (res.deltas || []).map((d, idx) => {
+    const col = d > 0 ? "#34d399" : (d < 0 ? "#f87171" : "#d1d5db");
+    const sign = d > 0 ? `+${d.toLocaleString()}` : d.toLocaleString();
+    const scoreNow = res.scores ? res.scores[idx].toLocaleString() : "";
+    return `
+      <div class="modal-delta-card">
+        <div style="font-weight:bold; margin-bottom:4px;">${seatLabels[idx]}</div>
+        <div style="font-size:1.05rem; font-weight:bold; color:${col};">${sign} 点</div>
+        <div style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">最終: ${scoreNow}点</div>
+      </div>
+    `;
+  }).join("");
+
+  let finalRankingHtml = "";
+  if (isGameDone && res.scores) {
+    const ranked = res.scores.map((sc, idx) => ({ idx, name: seatLabels[idx], score: sc }))
+      .sort((a, b) => b.score - a.score);
+    const rankItems = ranked.map((r, i) => `
+      <span style="padding:3px 10px; border-radius:6px; background:${r.idx === 0 ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.08)'}; border:1px solid ${i === 0 ? '#fbbf24' : 'transparent'};">
+        <strong>${i + 1}位</strong> ${r.name}: <span style="color:#fde047; font-weight:bold;">${r.score.toLocaleString()}点</span>
+      </span>
+    `).join("");
+    finalRankingHtml = `
+      <div style="background:rgba(180,83,9,0.3); border:2px solid #fbbf24; border-radius:10px; padding:10px; margin-bottom:14px; text-align:center;">
+        <div style="font-weight:900; color:#fde047; font-size:1.05rem; margin-bottom:6px;">🏆 半荘終了！ 最終順位結果</div>
+        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:0.86rem;">${rankItems}</div>
+      </div>
+    `;
+  }
+
+  const reviewSectionHtml = buildRoundReviewHtml(res.round_review_list || []);
+
+  const nextActionBtnHtml = isGameDone
+    ? `<button class="modal-close-btn" style="background:linear-gradient(180deg, #10b981, #059669); color:#000;" onclick="resetGame()">🎉 半荘終了！ 新しい対局を開始する</button>`
+    : `<button class="modal-close-btn" onclick="closeRoundModal()">確認して次の局へ進む</button>`;
+
+  if (res.type === "ryukyoku") {
+    content.innerHTML = `
+      <div class="modal-header">
+        <div class="modal-title">🌊 ${res.round_title} — ${res.way_str}</div>
+      </div>
+      <div class="modal-deltas-grid">${deltasHtml}</div>
+      ${reviewSectionHtml}
+      ${finalRankingHtml}
+      ${nextActionBtnHtml}
+    `;
+    modal.style.display = "flex";
+    return;
+  }
+
+  const handHtml = (res.hand || []).map(t => createTileSVG(t, "tile-svg-modal")).join("");
+  const winTileHtml = `
+    <div style="margin-left:14px; padding-left:12px; border-left:2px dashed rgba(255,255,255,0.4); text-align:center;">
+      <div style="font-size:0.75rem; color:#fbbf24; font-weight:bold; margin-bottom:3px;">
+        ${res.is_tsumo ? "ツモ牌" : `ロン牌 (◀${res.target_name})`}
+      </div>
+      ${createTileSVG(res.win_pai, "tile-svg-modal")}
+    </div>
+  `;
+  const meldsHtml = (res.melds || []).map(m => {
+    const fromBadge = (m.from_name && m.from_pid !== undefined && m.from_pid !== res.actor)
+      ? `<span class="meld-from-badge">◀${m.from_name}</span>`
+      : "";
+    return `
+      <div class="meld-group" style="margin-left:10px;">
+        <span style="color:#fbbf24; font-weight:bold; margin-right:3px;">${m.type}</span>
+        ${fromBadge}
+        ${m.tiles.map((t, idx) => `<span class="${(idx === 0 && m.called_tile) ? 'meld-called-tile' : ''}">${createTileSVG(t, "tile-svg-dora")}</span>`).join("")}
+      </div>
+    `;
+  }).join("");
+
+  const yakusHtml = (res.yakus || []).map(y => `
+    <div class="modal-yaku-row">
+      <span>${y.name}</span>
+      <span style="color:#fbbf24;">${y.han} 飜</span>
+    </div>
+  `).join("");
+
+  const sc = res.score_calc || {};
+  const fuChipsHtml = (sc.fu_breakdown || []).map(f =>
+    `<span class="fu-chip">${f.name}: ${f.fu}符</span>`
+  ).join(" ＋ ");
+  const fuCutupNote = (sc.fu_raw && sc.fu_total && sc.fu_raw !== sc.fu_total)
+    ? `<span style="color:#fde047; font-weight:bold; margin-left:6px;">＝ 計 ${sc.fu_raw}符 ➡ 10符単位切上 【${sc.fu_total}符】</span>`
+    : `<span style="color:#fde047; font-weight:bold; margin-left:6px;">＝ 【${sc.fu_total || 30}符】</span>`;
+
+  const scoreCalcDetailHtml = sc.fu_breakdown ? `
+    <div class="modal-fu-box">
+      <div style="font-weight:bold; color:#38bdf8; margin-bottom:6px;">
+        🧮 点数計算の内訳 （${sc.fu_total}符 × ${sc.total_han}飜）
+      </div>
+      <div style="margin-bottom:6px; line-height:1.6;">
+        <span style="color:#9ca3af; font-size:0.78rem;">【符計算】</span>
+        ${fuChipsHtml} ${fuCutupNote}
+      </div>
+      <div style="color:#e2e8f0; font-size:0.8rem; background:rgba(0,0,0,0.35); padding:6px 10px; border-radius:6px;">
+        <div>📐 <strong>計算式:</strong> ${sc.formula_text || ""}</div>
+        <div style="margin-top:3px; color:#a7f3d0;">
+          💰 <strong>打点支払:</strong> ${sc.payment_text || ""}${sc.extra_bonus_str ? " ｜ " + sc.extra_bonus_str : ""}
+        </div>
+      </div>
+    </div>
+  ` : "";
+
+  const isSelfWin = (res.actor === 0);
+  const isSelfDealIn = (!res.is_tsumo && res.target === 0);
+  const titleBannerColor = isSelfWin ? "#34d399" : (isSelfDealIn ? "#f87171" : "#fbbf24");
+
+  content.innerHTML = `
+    <div class="modal-header">
+      <div>
+        <div style="font-size:0.9rem; color:#9ca3af;">${res.round_title} 結果</div>
+        <div class="modal-title" style="color:${titleBannerColor};">
+          ${isSelfWin ? "🎉" : "⚡"} ${res.actor_name} の ${res.way_str}！
+        </div>
+      </div>
+      <div style="display:flex; gap:5px; align-items:center;">
+        <span style="font-size:0.82rem; color:#d1d5db;">ドラ表示:</span>
+        ${(res.dora_markers || []).map(d => createTileSVG(d, "tile-svg-dora", true)).join("")}
+      </div>
+    </div>
+
+    <div class="modal-hand-box">
+      ${handHtml}
+      ${winTileHtml}
+      ${meldsHtml}
+    </div>
+
+    <div style="font-size:0.88rem; color:#fbbf24; font-weight:bold; margin-bottom:6px;">▼ 成立した役一覧（計 ${sc.total_han || ""} 飜）</div>
+    <div class="modal-yakus-grid">${yakusHtml}</div>
+
+    ${scoreCalcDetailHtml}
+
+    <div class="modal-total-score">
+      ${res.rank_label} ／ 獲得総額: +${(res.won_points || 0).toLocaleString()} 点
+    </div>
+
+    <div class="modal-deltas-grid">${deltasHtml}</div>
+
+    ${reviewSectionHtml}
+    ${finalRankingHtml}
+    ${nextActionBtnHtml}
+  `;
+  modal.style.display = "flex";
+}
+
+
+function closeRoundModal() {
+  document.getElementById("roundResultModal").style.display = "none";
+}
+
+async function runAnimationSequence(anims, finalDiscardsMap, myGen) {
+  const addedCounts = {0: 0, 1: 0, 2: 0, 3: 0};
+  anims.forEach(a => {
+    if (a.kind === "dahai") addedCounts[a.actor] = (addedCounts[a.actor] || 0) + 1;
+  });
+
+  const workingDiscards = {};
+  for (let pid = 0; pid < 4; pid++) {
+    const list = finalDiscardsMap[pid] || [];
+    const addN = addedCounts[pid] || 0;
+    workingDiscards[pid] = list.slice(0, Math.max(0, list.length - addN));
+    renderRiverTiles(pid, workingDiscards[pid], false);
+  }
+
+  for (let i = 0; i < anims.length; i++) {
+    if (myGen !== animGeneration) return false;
+    const step = anims[i];
+    setActiveTurnSeat(step.actor);
+
+    if (step.kind === "call") {
+      showCutin(`${step.actor_name}: ${step.call_text}`);
+      if (step.target !== undefined && step.target !== null && step.actor !== step.target) {
+        showCallArrow(step.actor, step.target, step.call_text, 850);
+      }
+      if (step.call_text.includes("リーチ")) playSE("riichi");
+      else if (step.call_text.includes("ツモ") || step.call_text.includes("ロン")) playSE("hora");
+      else playSE("call");
+      await new Promise(r => setTimeout(r, 820));
+    } else if (step.kind === "dahai") {
+      workingDiscards[step.actor].push({
+        pai: step.pai,
+        tsumogiri: step.tsumogiri,
+        is_riichi: step.is_riichi
+      });
+      renderRiverTiles(step.actor, workingDiscards[step.actor], true);
+      playSE("discard");
+      // リーチ後の連続ツモ切り等でも視認しやすいテンポ（240ms〜330ms）で再生
+      await new Promise(r => setTimeout(r, step.actor === 0 ? 240 : 330));
+    }
+  }
+  return (myGen === animGeneration);
+}
+
+// ★追加：打牌またはスルー直後に、手牌を「切った後のソート済み13枚（ツモ枠なし）」へ即座に更新する関数
+function renderSortedHand13Immediate(hand13List) {
+  const callAlert = document.getElementById("callAlert");
+  if (callAlert) callAlert.style.display = "none";
+  const actContainer = document.getElementById("actionButtons");
+  if (actContainer) actContainer.innerHTML = "";
+
+  const handRow = document.getElementById("handRow");
+  if (!handRow || !Array.isArray(hand13List)) return;
+
+  handRow.innerHTML = hand13List.map(tile => `
+    <div class="tile-btn disabled-choice" style="opacity:0.92; filter:none;">
+      ${createTileSVG(tile, "tile-svg-hand")}
+    </div>
+  `).join("");
+}
+
+async function playStepAnimations(state, chosenAction = "") {
+  if (!enableStepAnim) {
+    renderState(state, true);
+    return;
+  }
+
+  const myGen = ++animGeneration;
+  isAnimatingSteps = true;
+
+  try {
+    // 1. まず「牌を捨てた後のソート済み13枚手牌」を即座に画面へ表示する（まだ次のツモ牌は見せない）
+    if (Array.isArray(state.post_discard_hand)) {
+      renderSortedHand13Immediate(state.post_discard_hand);
+    } else if (chosenAction === "none") {
+      // ポン・チーをスルーした直後もアラートとボタンを即座に消す
+      renderSortedHand13Immediate(state.hand || []);
+    }
+
+    // 2. 局終了（和了・流局）が発生している場合は、最終打牌〜決着カットインまでを再生
+    if (state.round_result && state.round_result.round_end_animations && state.round_result.round_end_animations.length > 0) {
+      document.getElementById("turnGuideText").innerHTML =
+        `<span style="color:#fde047;">⏳ 局の決着まで進行しています...</span>`;
+      const endDiscards = state.round_result.round_end_discards || {};
+      const ok = await runAnimationSequence(state.round_result.round_end_animations, endDiscards, myGen);
+      if (!ok) return;
+      await new Promise(r => setTimeout(r, 450));
+      if (myGen !== animGeneration) return;
+    } else if (state.step_animations && state.step_animations.length > 0) {
+      // 3. 自分の打牌落下 ➔ 各CPUの思考・打牌・鳴きアニメーションを順番に再生
+      document.getElementById("turnGuideText").innerHTML =
+        `<span style="color:#fde047;">⏳ 対戦相手が思考・打牌しています...</span>`;
+      const currentDiscards = {};
+      state.players.forEach(p => { currentDiscards[p.pid] = p.discards; });
+      const ok = await runAnimationSequence(state.step_animations, currentDiscards, myGen);
+      if (!ok) return;
+
+      // 4. 各CPUの行動が終わり、自分のツモ番（drawn_tileがある状態）で戻ってきたら「牌を引く間」を少し入れてからツモ牌を表示
+      if (state.drawn_tile && !state.is_call_chance && !state.done) {
+        setActiveTurnSeat(0);
+        document.getElementById("turnGuideText").innerHTML =
+          `<span style="color:#34d399; font-weight:bold;">🀄 山から牌をツモりました！</span>`;
+        await new Promise(r => setTimeout(r, 220));
+        if (myGen !== animGeneration) return;
+      }
+    } else if (chosenAction === "none" && state.drawn_tile) {
+      // 上家の打牌に対するチー/ポンをスルーして自分のツモ番になった場合の演出
+      setActiveTurnSeat(0);
+      document.getElementById("turnGuideText").innerHTML =
+        `<span style="color:#93c5fd;">🛑 スルーしました ➔ 🀄 自家のツモ番です</span>`;
+      await new Promise(r => setTimeout(r, 320));
+      if (myGen !== animGeneration) return;
+    }
+  } finally {
+    if (myGen === animGeneration) {
+      isAnimatingSteps = false;
+    }
+  }
+
+  if (myGen === animGeneration) {
+    renderState(state, true);
+  }
+}
+
+function renderState(state, skipAnim = false, chosenAction = "") {
+  latestState = state;
+  if (state.current_ai_prompt) currentTurnPromptText = state.current_ai_prompt;
+  if (state.enable_retry !== undefined) {
+    enableRetry = Boolean(state.enable_retry);
+    syncToggleButtonsUI();
+  }
+
+  const hasEndAnim = Boolean(state.round_result && state.round_result.round_end_animations && state.round_result.round_end_animations.length > 0);
+  const hasStepAnim = Boolean(state.step_animations && state.step_animations.length >= 1);
+  const isPassToSelfDraw = (chosenAction === "none" && Boolean(state.drawn_tile));
+
+  if (!skipAnim && enableStepAnim && !state.retry_mode && (hasEndAnim || hasStepAnim || isPassToSelfDraw)) {
+    if (state.feedback && showTop3Eval) renderFeedback(state.feedback);
+    playStepAnimations(state, chosenAction);
+    return;
+  }
+
+  if (state.round_result) {
+    const roundRes = state.round_result;
+    state.round_result = null;
+    if (latestState) latestState.round_result = null;
+    showRoundResultModal(roundRes);
+  }
+
+  document.getElementById("lcdRound").textContent = state.round_str;
+  document.getElementById("lcdSub").textContent = `${state.honba}本場 / 供託:${state.kyotaku}`;
+  document.getElementById("modeSelect").value = state.strictness_mode || "standard";
+  document.getElementById("aiLevelSelect").value = String(state.ai_level || 3);
+  if (state.training_theme) {
+    document.getElementById("themeSelect").value = state.training_theme;
+  }
+  if (state.training_theme_desc) {
+    document.getElementById("themeDescText").textContent = `🎯 ${state.training_theme_desc}`;
+  }
+
+  if (state.teacher_type && document.getElementById("teacherSelect")) {
+    const tSel = document.getElementById("teacherSelect");
+    if (Array.isArray(state.available_teachers) && tSel.options.length !== state.available_teachers.length) {
+      tSel.innerHTML = state.available_teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+    }
+    tSel.value = state.teacher_type;
+  }
+  if (document.getElementById("searchPresetWrap")) {
+    document.getElementById("searchPresetWrap").style.display = (state.teacher_type === "search") ? "flex" : "none";
+  }
+  if (document.getElementById("romanPresetWrap")) {
+    document.getElementById("romanPresetWrap").style.display = (state.teacher_type === "roman") ? "flex" : "none";
+  }
+  if (state.roman_preset && document.getElementById("romanPresetSelect")) {
+    document.getElementById("romanPresetSelect").value = state.roman_preset;
+  }
+  if (state.search_preset && document.getElementById("searchPresetSelect")) {
+    document.getElementById("searchPresetSelect").value = state.search_preset;
+  }
+  if (state.teacher_desc && document.getElementById("teacherDescText")) {
+    document.getElementById("teacherDescText").textContent = `🎓 ${state.teacher_desc}`;
+  }
+  if (document.getElementById("speedPresetWrap")) {
+    document.getElementById("speedPresetWrap").style.display = (state.teacher_type === "speed") ? "flex" : "none";
+  }
+  if (state.speed_preset && document.getElementById("speedPresetSelect")) {
+    document.getElementById("speedPresetSelect").value = state.speed_preset;
+  }
+
+  renderWallVisual(state.wall_remaining, state.dora_markers);
+  renderPotentialYakus(state.potential_yakus);
+  renderRealtimeScoreEstimate(state.score_estimate);
+  renderTenpaiBar(state.tenpai_info, "");
+  renderDangerBanner(state.danger_info);
+  renderStatsAndLog(state.stats);
+
+const fbContainer = document.getElementById("feedbackContainer");
+  if (!showTop3Eval) {
+    fbContainer.style.display = "none";
+  } else {
+    fbContainer.style.display = "block";
+    if (state.feedback) {
+      renderFeedback(state.feedback);
+    } else if (showHintOverlay && state.current_top_3 && state.current_top_3.length > 0) {
+      renderCurrentHandTop3Only();
+    } else {
+      fbContainer.innerHTML = `
+        <div class="feedback-card">
+          <div style="font-size:0.82rem; color:#9ca3af;">
+            手牌をクリックするとAIの評価スコアと、「なぜAIの1位手が優れているか」および上位3候補が表示されます。（💡ヒントをONにすると打牌前に現在の手牌の上位3候補を表示します）
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  const tp = state.tenpai_info || {};
+  const ukeireMap = tp.discard_ukeire_map || {};
+  const maxUkeireRem = Math.max(
+    0,
+    ...Object.values(ukeireMap).filter(x => !x.is_shanten_back).map(x => x.total_remaining || 0)
+  );
+
+  state.players.forEach(p => {
+    const windHtml = `<span class="wind-badge">${p.wind}</span>`;
+    const oyaHtml = p.is_oya ? `<span class="oya-badge">親</span>` : "";
+    const riichiHtml = p.riichi ? `<span class="riichi-badge">🔥リーチ</span>` : "";
+    let selfStatusHtml = "";
+    if (p.pid === 0 && showShantenDisplay) {
+      if (tp.is_13_tenpai || tp.has_tenpai_discards) {
+        selfStatusHtml += `<span class="tenpai-self-badge">聴牌</span>`;
+        if (tp.base_is_furiten) {
+          selfStatusHtml += `<span class="furiten-self-badge">🚨フリテン</span>`;
+        }
+      } else if (tp.current_shanten !== undefined) {
+        selfStatusHtml += `<span class="shanten-self-badge">${tp.current_shanten}シャンテン</span>`;
+      }
+    }
+
+    document.getElementById(`seatInfo${p.pid}`).innerHTML = `
+      <div><strong>${p.name}</strong>${windHtml}${oyaHtml}${riichiHtml}${selfStatusHtml}</div>
+      <div style="font-family:monospace; font-weight:bold; color:#fff;">${p.score.toLocaleString()}点</div>
+    `;
+
+    const compEl = document.getElementById(`compSeat${p.pid}`);
+    if (compEl) {
+      compEl.className = `comp-seat ${p.is_oya ? 'is-oya' : ''}`;
+      compEl.innerHTML = `<span class="comp-wind">${p.wind}</span>${p.score.toLocaleString()}${p.riichi ? '<span class="riichi-stick-icon"></span>' : ''}`;
+    }
+
+    if (p.pid !== 0) {
+      const oppHandEl = document.getElementById(`oppHand${p.pid}`);
+      if (oppHandEl) {
+        if (showOpponentHands && p.hand && p.hand.length > 0) {
+          const openHtml = p.hand.map(t => `<span data-tile-norm="${normTile(t)}">${createTileSVG(t, "tile-svg-meld")}</span>`).join("");
+          const drawnHtml = p.drawn_tile
+            ? `<span style="margin-left:6px; border-left:1px dashed rgba(255,255,255,0.4); padding-left:4px;" data-tile-norm="${normTile(p.drawn_tile)}">${createTileSVG(p.drawn_tile, "tile-svg-meld")}</span>`
+            : "";
+          oppHandEl.innerHTML = openHtml + drawnHtml;
+        } else {
+          const cnt = p.hand_count || 13;
+          oppHandEl.innerHTML = Array.from({length: cnt}).map(() => `<span class="back-tile"></span>`).join("");
+        }
+      }
+    }
+
+    renderRiverTiles(p.pid, p.discards, false);
+
+    const meldsEl = document.getElementById(`melds${p.pid}`);
+    if (meldsEl) {
+      meldsEl.innerHTML = p.melds.map(m => {
+        const isFromOther = (m.from_pid !== undefined && m.from_pid !== p.pid && m.from_name);
+        const isFromHuman = (isFromOther && m.from_pid === 0);
+        const fromBadgeHtml = isFromOther
+          ? `<span class="meld-from-badge ${isFromHuman ? 'from-self-alert' : ''}" title="${m.from_name}の捨て牌から${m.type}">◀${m.from_name}</span>`
+          : "";
+        return `
+          <div class="meld-group"
+               ${isFromOther ? `onmouseenter="showCallArrow(${p.pid}, ${m.from_pid}, '${m.type}', 0)" onmouseleave="clearCallArrow()"` : ""}>
+            <span style="color:#fbbf24; font-weight:bold; margin-right:2px;">${m.type}</span>
+            ${fromBadgeHtml}
+            ${m.tiles.map((t, idx) => {
+              const isSideways = (isFromOther && idx === 0);
+              return `<span class="${isSideways ? 'meld-called-tile' : ''}" data-tile-norm="${normTile(t)}">${createTileSVG(t, "tile-svg-meld")}</span>`;
+            }).join("")}
+          </div>
+        `;
+      }).join("");
+    }  });
+
+  setActiveTurnSeat(0);
+
+  const callAlert = document.getElementById("callAlert");
+  if (state.is_call_chance && state.last_discard) {
+    callAlert.style.display = "flex";
+    document.getElementById("callAlertText").textContent =
+      `🔔 ${state.last_discard.actor_name} が打牌しました：`;
+    document.getElementById("callAlertTile").innerHTML =
+      createTileSVG(state.last_discard.pai, "tile-svg-dora");
+  } else {
+    callAlert.style.display = "none";
+  }
+
+  const guide = document.getElementById("turnGuideText");
+  if (state.done) {
+    guide.innerHTML = `
+      <span style="color:#fbbf24; font-weight:bold;">🏆 半荘終了！ 最終スコア: ${JSON.stringify(state.final_scores)}</span>
+      <button class="act-btn" style="margin-left:12px; background:linear-gradient(180deg, #10b981, #059669); color:#000; border-color:#a7f3d0;" onclick="resetGame()">
+        🎉 新しい対局を開始する
+      </button>
+    `;
+  } else if (state.retry_mode && enableRetry) {
+    guide.innerHTML = `<span style="color:#fbbf24; font-weight:bold;">⚠️ 悪手は除外されました！金色に光る合格候補（スコア${state.current_threshold}点以上）から選び直してください</span>`;
+  } else if (state.is_call_chance) {
+    guide.textContent = "鳴き・アガリ・スルーのいずれかのボタンを選択してください";
+  } else {
+    guide.textContent = showUkeireDisplay
+      ? "手牌をクリックして打牌してください（各牌の下の枚数＝切った後の有効牌枚数、ホバーで内訳表示）"
+      : "手牌または右端のツモ牌をクリックして打牌してください";
+  }
+
+
+  const actContainer = document.getElementById("actionButtons");
+  const actionOrder = ["hora", "reach", "pon", "chi_low", "chi_mid", "chi_high", "kan", "ryukyoku", "none"];
+  const sortedSpecialActions = [...(state.special_actions || [])].sort((a, b) => {
+    const ia = actionOrder.indexOf(a.id);
+    const ib = actionOrder.indexOf(b.id);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+
+  actContainer.innerHTML = sortedSpecialActions.map(act => {
+    const allowed = state.allowed_choices.includes(act.id);
+    const hint = state.eval_hint_map ? state.eval_hint_map[act.id] : null;
+    const hintHtml = (showHintOverlay && hint)
+      ? `<span class="hint-overlay-badge ${hint.is_acceptable ? 'hint-good' : ''}">${hint.rank}位:${hint.score}点</span>`
+      : "";
+    const cls = [
+      "act-btn",
+      act.id === "none" ? "pass-btn" : "",
+      act.id === "hora" ? "hora-btn" : "",
+      !allowed ? "disabled-choice" : "",
+      (state.retry_mode && enableRetry && allowed) ? "highlight-top3" : ""
+    ].join(" ");
+    return `<button class="${cls}" onclick="sendAction('${act.id}')">${hintHtml}${act.label}</button>`;
+  }).join("");
+
+  const dangerTilesMap = (state.danger_info && state.danger_info.active) ? (state.danger_info.tiles || {}) : {};
+
+  function buildHandTileUnit(tile) {
+    const allowed = !state.is_call_chance && isChoiceAllowed(tile, state.allowed_choices);
+    const hint = getHintForTile(tile, state.eval_hint_map);
+    const dInfo = dangerTilesMap[tile];
+
+    let topBadgeHtml = "";
+    if (showHintOverlay && hint && !state.is_call_chance) {
+      topBadgeHtml = `<span class="hint-overlay-badge ${hint.is_acceptable ? 'hint-good' : ''}">${hint.rank}位:${hint.score}</span>`;
+    } else if (showDangerOverlay && dInfo && !state.is_call_chance) {
+      topBadgeHtml = `<span class="danger-badge danger-${dInfo.level}">${dInfo.badge}</span>`;
+    }
+
+    const uEntry = ukeireMap[tile] || ukeireMap[normTile(tile)];
+    let subBadgeHtml = "";
+    if (uEntry && !state.is_call_chance) {
+      if (showUkeireDisplay && showShantenDisplay) {
+        if (uEntry.is_tenpai) {
+          const clsSub = uEntry.is_furiten ? "is-furiten-sub" : "is-tenpai-sub";
+          const lbl = uEntry.is_furiten ? `振聴${uEntry.total_remaining}枚` : `聴牌${uEntry.total_remaining}枚`;
+          subBadgeHtml = `<span class="tile-ukeire-sub ${clsSub}">${lbl}</span>`;
+        } else if (uEntry.is_shanten_back) {
+          subBadgeHtml = `<span class="tile-ukeire-sub is-back-sub">戻し</span>`;
+        } else {
+          const isMax = (uEntry.total_remaining > 0 && uEntry.total_remaining === maxUkeireRem);
+          subBadgeHtml = `<span class="tile-ukeire-sub ${isMax ? 'is-max-ukeire' : ''}">${uEntry.total_remaining}枚</span>`;
+        }
+      } else if (showUkeireDisplay && !showShantenDisplay) {
+        const isMax = (!uEntry.is_shanten_back && uEntry.total_remaining > 0 && uEntry.total_remaining === maxUkeireRem);
+        subBadgeHtml = `<span class="tile-ukeire-sub ${isMax ? 'is-max-ukeire' : ''}">${uEntry.total_remaining}枚</span>`;
+      } else if (!showUkeireDisplay && showShantenDisplay) {
+        if (uEntry.is_tenpai) {
+          const clsSub = uEntry.is_furiten ? "is-furiten-sub" : "is-tenpai-sub";
+          const lbl = uEntry.is_furiten ? "振聴" : "聴牌";
+          subBadgeHtml = `<span class="tile-ukeire-sub ${clsSub}">${lbl}</span>`;
+        } else if (uEntry.is_shanten_back) {
+          subBadgeHtml = `<span class="tile-ukeire-sub is-back-sub">戻し</span>`;
+        }
+      }
+    }
+
+    const cls = [
+      "tile-btn",
+      !allowed ? "disabled-choice" : "",
+      (state.retry_mode && enableRetry && allowed) ? "highlight-top3" : ""
+    ].join(" ");
+
+    return `
+      <div class="${cls}"
+           onmouseenter="onHoverHandTile('${tile}')"
+           onmouseleave="onHoverHandTile('')"
+           onclick="sendAction('${tile}')">
+        ${topBadgeHtml}
+        ${createTileSVG(tile, "tile-svg-hand")}
+        ${subBadgeHtml}
+      </div>
+    `;
+  }
+
+  const handRow = document.getElementById("handRow");
+  const handHtml = state.hand.map(tile => buildHandTileUnit(tile)).join("");
+
+  let tsumoHtml = "";
+  if (state.drawn_tile) {
+    tsumoHtml = `
+      <div class="tsumo-gap">
+        <span class="tsumo-label">ツモ</span>
+        ${buildHandTileUnit(state.drawn_tile)}
+      </div>
+    `;
+  }
+  handRow.innerHTML = handHtml + tsumoHtml;
+}
+
+let lastDecisionPromptText = "";
+let currentTurnPromptText = "";
+
+function openAiPromptModal(preferMode = "last") {
+  if (latestState && latestState.current_ai_prompt) {
+    currentTurnPromptText = latestState.current_ai_prompt;
+  }
+  if (latestState && latestState.feedback && latestState.feedback.ai_question_prompt) {
+    lastDecisionPromptText = latestState.feedback.ai_question_prompt;
+  }
+
+  const mode = (preferMode === "last" && lastDecisionPromptText) ? "last" : "current";
+  switchPromptModalTab(mode);
+  document.getElementById("aiPromptModal").style.display = "flex";
+}
+
+function switchPromptModalTab(mode) {
+  const lastBtn = document.getElementById("tabLastDecisionBtn");
+  const curBtn = document.getElementById("tabCurrentTurnBtn");
+  const textarea = document.getElementById("aiPromptTextarea");
+
+  if (mode === "last" && lastDecisionPromptText) {
+    lastBtn.classList.add("active-tab");
+    curBtn.classList.remove("active-tab");
+    textarea.value = lastDecisionPromptText;
+  } else {
+    curBtn.classList.add("active-tab");
+    lastBtn.classList.remove("active-tab");
+    textarea.value = currentTurnPromptText || lastDecisionPromptText || "プロンプトデータがありません。";
+  }
+}
+
+function closeAiPromptModal() {
+  document.getElementById("aiPromptModal").style.display = "none";
+}
+
+async function copyAiPromptToClipboard() {
+  const textarea = document.getElementById("aiPromptTextarea");
+  const btn = document.getElementById("copyPromptBtn");
+  try {
+    await navigator.clipboard.writeText(textarea.value);
+    btn.textContent = "✅ コピーしました！（AIチャットに貼り付けてください）";
+    btn.style.background = "#fbbf24";
+    setTimeout(() => {
+      btn.textContent = "📋 プロンプトをクリップボードにコピー";
+      btn.style.background = "linear-gradient(180deg, #10b981, #059669)";
+    }, 2500);
+  } catch (e) {
+    textarea.select();
+    document.execCommand("copy");
+    btn.textContent = "✅ コピーしました！";
+  }
+}
+
+function buildTop3ItemsHtml(top3Array) {
+  return (top3Array || []).map(item => {
+    const isTile = !["none","reach","pon","chi_low","chi_mid","chi_high","kan","hora","ryukyoku"].includes(item.action);
+    const visual = isTile
+      ? createTileSVG(item.action, "tile-svg-river")
+      : `<span style="font-weight:bold; color:#93c5fd;">${item.label}</span>`;
+    const statusTag = item.is_acceptable
+      ? `<span style="color:#34d399; font-size:0.7rem; font-weight:bold;">[合格圏]</span>`
+      : `<span style="color:#f87171; font-size:0.7rem; font-weight:bold;">[低評価・除外]</span>`;
+
+    const badgeParts = [];
+    if (showShantenDisplay && item.shanten_part) badgeParts.push(item.shanten_part);
+    if (showUkeireDisplay && item.ukeire_part) badgeParts.push(item.ukeire_part);
+
+    const ukeireNote = badgeParts.length > 0
+      ? `<div style="font-size:0.7rem; color:#7dd3fc;">${badgeParts.join(" / ")}</div>`
+      : "";
+    const teacherNoteHtml = item.teacher_note
+      ? `<div style="font-size:0.68rem; color:#fde047; margin-top:1px;">${item.teacher_note}</div>`
+      : "";
+
+    return `
+      <div class="top3-item ${!item.is_acceptable ? 'rejected-move' : ''}">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="rank-badge rank-${item.rank}">第${item.rank}位</span>
+          ${visual}
+          <div>
+            ${statusTag}
+            ${ukeireNote}
+            ${teacherNoteHtml}
+          </div>
+        </div>
+        <div style="text-align:right; font-size:0.76rem;">
+          <div>スコア: <strong>${item.score}</strong> 点</div>
+          <div style="color:#9ca3af;">推奨度: ${item.prob}%</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderCurrentHandTop3Only() {
+  const container = document.getElementById("feedbackContainer");
+  if (!showTop3Eval || !latestState || !latestState.current_top_3) return;
+  const teacherTitle = latestState.teacher_name || "Mortal AI";
+  const top3Html = buildTop3ItemsHtml(latestState.current_top_3);
+  container.innerHTML = `
+    <div class="feedback-card" style="border-left-color: var(--gold);">
+      <div style="font-size:0.8rem; font-weight:bold; color:#fde047;">
+        💡 【ヒントON：現在の手牌の推奨トップ3】 (${ teacherTitle })
+      </div>
+      <div class="top3-list">${top3Html}</div>
+      <button class="prompt-open-btn" onclick="openAiPromptModal('current')">
+        🤖 現在の手牌でなぜこの手が1位？AI質問用プロンプトを表示
+      </button>
+    </div>
+  `;
+}
+
+function renderFeedback(fb) {
+  const container = document.getElementById("feedbackContainer");
+  if (fb && fb.ai_question_prompt) {
+    lastDecisionPromptText = fb.ai_question_prompt;
+  }
+  if (!showTop3Eval) {
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "block";
+
+  if (fb.status === "invalid") {
+    container.innerHTML = `<div class="feedback-card bad">${fb.message}</div>`;
+    return;
+  }
+
+  const isGood = (fb.status === "good");
+  if (!isGood) playSE("bad");
+
+  const reasonsHtml = (fb.comparison_reasons || []).map(r => `
+    <div class="comparison-reason-item">${r}</div>
+  `).join("");
+
+  // ★ヒント: ON のときは「現在の手牌の上位3候補(latestState.current_top_3)」を表示し、OFFのときは従来通り「fb.top_3」を表示
+  const useCurrentHandTop3 = Boolean(showHintOverlay && latestState && Array.isArray(latestState.current_top_3) && latestState.current_top_3.length > 0);
+  const targetTop3List = useCurrentHandTop3 ? latestState.current_top_3 : (fb.top_3 || []);
+  const top3Html = buildTop3ItemsHtml(targetTop3List);
+
+  const teacherTitle = (latestState && latestState.teacher_name) ? latestState.teacher_name : "Mortal AI";
+  const top3HeaderLabel = useCurrentHandTop3
+    ? `▼ 📍【現在の手牌】 ${teacherTitle} 上位3候補 (💡ヒントON)`
+    : `▼ ${teacherTitle} 上位3候補`;
+  const promptModeArg = useCurrentHandTop3 ? "current" : "last";
+
+  container.innerHTML = `
+    <div class="feedback-card ${isGood ? 'good' : 'bad'}">
+      <div style="font-weight:bold; font-size:0.84rem; color:${isGood ? '#34d399' : '#f87171'};">
+        ${fb.message}
+      </div>
+      <div class="score-big">
+        評価スコア: ${fb.score} 点
+        <span style="font-size:0.84rem; font-weight:normal; color:#d1d5db;">
+          (${fb.rank}位 / ${fb.total_candidates}候補)
+        </span>
+      </div>
+      <div style="font-size:0.76rem; color:#9ca3af; margin-bottom:4px;">
+        あなたの選択: [${fb.choice_label}] ｜ AI推奨度: ${fb.prob}% ｜ Q値: ${fb.q_value}
+      </div>
+      ${reasonsHtml ? `<div class="comparison-box"><div style="font-weight:bold; color:#60a5fa; margin-bottom:5px;">💡 あなたの選択 vs AI最善手の詳細比較解説</div>${reasonsHtml}</div>` : ""}
+      <div style="font-size:0.76rem; font-weight:bold; color:${useCurrentHandTop3 ? '#38bdf8' : '#fbbf24'}; margin-top:4px;">
+        ${top3HeaderLabel}
+      </div>
+      <div class="top3-list">${top3Html}</div>
+      <button class="prompt-open-btn" onclick="openAiPromptModal('${promptModeArg}')">
+        🤖 なぜこの手が1位？AI質問用プロンプトを表示・コピー
+      </button>
+    </div>
+  `;
+}
+
+async function fetchState() {
+  const res = await fetch("/api/state");
+  const data = await res.json();
+  renderState(data, true);
+}
+
+let isSendingAction = false;
+
+async function sendAction(choice) {
+  if (isAnimatingSteps || isSendingAction) return;
+  isSendingAction = true;
+
+  try {
+    const specialCodes = ["none","reach","pon","chi_low","chi_mid","chi_high","kan","hora","ryukyoku"];
+    if (latestState && !latestState.is_call_chance && !specialCodes.includes(choice)) {
+      const allowed = isChoiceAllowed(choice, latestState.allowed_choices || []);
+      if (allowed) {
+        const fullHand = [...(latestState.hand || [])];
+        if (latestState.drawn_tile) fullHand.push(latestState.drawn_tile);
+        let rmIdx = fullHand.indexOf(choice);
+        if (rmIdx === -1) {
+          rmIdx = fullHand.findIndex(t => normTile(t) === normTile(choice));
+        }
+        if (rmIdx !== -1) {
+          fullHand.splice(rmIdx, 1);
+          renderSortedHand13Immediate(fullHand);
+        }
+      }
+    } else if (choice === "none" && latestState) {
+      renderSortedHand13Immediate(latestState.hand || []);
+    }
+
+    const res = await fetch("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ choice })
+    });
+    const data = await res.json();
+    renderState(data, false, choice);
+  } catch (err) {
+    console.error("Action error:", err);
+  } finally {
+    isSendingAction = false;
+  }
+}
+
+async function resetGame() {
+  animGeneration++;
+  isAnimatingSteps = false;
+  isSendingAction = false;
+  closeRoundModal();
+  const res = await fetch("/api/reset", { method: "POST" });
+  const data = await res.json();
+  renderState(data, true);
+}
+
+syncToggleButtonsUI();
+fetchState();
+</script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+================================================================================
+
+MahjongTrainer ライセンスおよび著作権についてのご案内
+
+================================================================================
+
+
+
+本ソフトウェア（以下「本アプリ」）をご購入・ダウンロードいただきありがとうございます。
+
+本アプリは、オープンソースソフトウェア（OSS）である麻雀AIエンジン「Mortal」および
+
+関連ライブラリ「libriichi」等を利用して構築されています。
+
+
+
+--------------------------------------------------------------------------------
+
+1. 本アプリ全体のライセンス（GNU AGPL v3.0）
+
+--------------------------------------------------------------------------------
+
+Copyright (c) 2026 [でみあん]
+
+
+
+本アプリはフリーソフトウェアであり、Free Software Foundation が公表した
+
+GNU Affero General Public License（GNU AGPL）バージョン3、あるいはそれ以降の
+
+バージョンの条件の下で、再頒布および改変することができます。
+
+
+
+本アプリは有用であることを願って頒布されますが、*全くの無保証* です。
+
+商業可能性の保証や特定目的への適合性は、言外に示されたものも含め全く存在しません。
+
+詳しくは GNU Affero General Public License をご覧ください。
+
+
+
+【ソースコードの提供について】
+
+本アプリの完全なソースコードは、AGPL-3.0ライセンスに基づき
+
+GitHubにて無償公開しています。また、BOOTHにて本商品をご購入いただいた方は、
+
+商品ダウンロードページからもソースコード同梱版を直接ダウンロードいただけます。
+
+GitHubリポジトリ:https://github.com/demianq-cyber/mahjong-trainer
+
+
+
+GNU Affero General Public License v3.0 の全文は、同梱の「COPYING.txt」（または
+
+以下のURL）をご参照ください。
+
+https://www.gnu.org/licenses/agpl-3.0.html
+
+
+
+--------------------------------------------------------------------------------
+
+2. AIモデル（学習済み重みデータ）および独自アセットの権利について
+
+--------------------------------------------------------------------------------
+
+※【作成者向け注記：該当する方を残して他方を削除してください】
+
+
+
+[パターンA：ご自身で独自に学習させたモデルデータ・独自設定ファイル等の場合]
+
+「models/」フォルダ内に含まれる学習済みAIモデルデータ（重みファイル）および独自の
+
+パラメータ設定ファイルは、プログラムのソースコードとは独立したデータ著作物であり、
+
+AGPL-3.0の対象外となります。これらのデータの無断転載・再配布・商用利用を禁じます。
+
+
+
+[パターンB：外部で公開されているMortalモデル等を同梱している場合]
+
+「models/」フォルダ内に含まれる学習済みAIモデルデータは、各配布元のライセンスに
+
+従います。（※配布元が商用利用・有料販売への同梱を許可しているか必ずご確認ください）
+
+
+
+--------------------------------------------------------------------------------
+
+3. 主要な利用オープンソースソフトウェア
+
+--------------------------------------------------------------------------------
+
+本アプリは以下のオープンソースソフトウェアを含んでいます。各ソフトウェアの著作権者
+
+および貢献者の皆様に深く感謝いたします。
+
+
+
+■ Mortal / libriichi
+
+  Copyright (c) Equim and contributors
+
+  License: GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+
+  Source: https://github.com/Equim-chan/Mortal
+
+
+
+■ RiichiEnv (riichienv)
+
+  License: Apache License 2.0
+
+
+
+■ PyTorch (torch)
+
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+
+  License: BSD-3-Clause License
+
+
+
+■ NumPy (numpy)
+
+  Copyright (c) 2005-2026, NumPy Developers.
+
+  License: BSD-3-Clause License
+
+
+
+■ Optuna (optuna)
+
+  Copyright (c) Preferred Networks, Inc.
+
+  License: MIT License
+
+
+
+■ Flask / Werkzeug / Jinja2 / Click / MarkupSafe / itsdangerous
+
+  Copyright (c) Pallets
+
+  License: BSD-3-Clause License
+
+
+
+■ SQLAlchemy / Alembic
+
+  Copyright (c) Michael Bayer and contributors.
+
+  License: MIT License
+
+
+
+■ Hugging Face Hub / hf-xet
+
+  Copyright (c) HuggingFace Inc.
+
+  License: Apache License 2.0
+
+
+
+■ Requests / urllib3 / certifi / charset-normalizer / idna
+
+  License: Apache License 2.0 / MIT License / MPL 2.0 / BSD-3-Clause License
+
+
+
+■ tqdm
+
+  License: MPL 2.0 AND MIT License
+
+
+
+※ 上記を含む、本アプリに同梱されているすべてのサードパーティ製Pythonライブラリの
+
+著作権表示およびライセンス条文の全文については、別ファイル「THIRD_PARTY_LICENSES.txt」
+
+に記載しております。あわせてご確認ください。
+
