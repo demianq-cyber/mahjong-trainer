@@ -141,7 +141,7 @@ cd ..\..
 2. Mortal用の学習済みモデルファイル（4人麻雀用 `.pth` ファイル）を用意し、ファイル名を **`mortal_298k.pth`** として `models/` フォルダ内に配置してください。
    * 配置パス: `models/mortal_298k.pth`
    * *(※別ファイル名の `.pth` モデルを使用する場合は、`mortal_298k.pth` にリネームするか、`ai_evaluator.py` 内の `weight_path` のデフォルト値を変更してください)*
-   * ※Download: Hugging Face
+   * ※Download: [Hugging Face（mortal-298k）](https://huggingface.co/VoidShine/mortal-298k)
    * ※ご利用の際は、mortalの規約をご確認の上、自己責任でお願いいたします。
 
 ---
