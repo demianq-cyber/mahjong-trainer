@@ -213,4 +213,4 @@ pyinstaller --clean -y MahjongTrainer_Release.spec
 
 ### ライセンス概要
 * 本ソフトウェアのプログラムコードは、[Equim-chan/Mortal](https://github.com/Equim-chan/Mortal)（`libriichi`）を利用しているため、**GNU Affero General Public License v3.0 (AGPL-3.0-or-later)** の下で公開・頒布されています。
-* 学習済みAIモデルデータ（`models/` 内の重みファイル）の権利および取り扱いについては、**[LICENSE_NOTICE.txt](./LICENSE_NOTICE.txt)** の「2. AIモデル（学習済み重みデータ）および独自アセットの権利について」をご確認ください。
+* ※なお、**学習済みAIモデルデータは本リポジトリには同梱されていません。** 利用に必要なモデルの入手方法および権利関係については、[環境構築手順 / LICENSE_NOTICE.txt] をご確認ください。
